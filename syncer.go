@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"github.com/mattn/go-mastodon"
 	"github.com/mmcdole/gofeed"
 	"path/filepath"
@@ -16,6 +17,7 @@ type Syncer struct {
 	dao        *DAO
 	feeds      []FeedTemplatePair
 	tmplDir    string
+	dryrun     bool
 }
 
 func (syncer *Syncer) Sync() error {
@@ -56,6 +58,12 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string) error {
 		err = tmpl.Execute(buf, item)
 		if err != nil {
 			return err
+		}
+		if syncer.dryrun {
+			fmt.Println("would be tooting:\n", buf.String())
+			continue
+		} else {
+			fmt.Println("tooting:\n", buf.String())
 		}
 		toot := mastodon.Toot{
 			Status: buf.String(),

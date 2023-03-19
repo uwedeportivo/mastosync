@@ -19,13 +19,13 @@ func InitConfig(path string) error {
 	viper.SetConfigPermissions(0600)
 	viper.SetConfigFile(path)
 	viper.SetDefault("mas", mastodon.Config{
-		Server:       "https://mastodon.social",
+		Server:       "https://some_mastodon_instance",
 		ClientID:     "some_client_id",
 		ClientSecret: "some_client_secret",
 		AccessToken:  "some_access_token",
 	})
-	viper.SetDefault("feeds", []FeedTemplatePair{{"http://some_RSS_feed.com/xml", "path_to_some.tmpl"},
-		{"http://some_other_RSS_feed.com/xml", "path_to_some_other.tmpl"}})
+	viper.SetDefault("feeds", []FeedTemplatePair{{"https://someAFeed.com/xml", "someA.tmpl"},
+		{"https://someBFeed.com/xml", "someB.tmpl"}})
 	return viper.WriteConfig()
 }
 

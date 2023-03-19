@@ -12,6 +12,13 @@ import (
 	"strings"
 )
 
+const defaultTmplContent string = `{{.Title}}
+
+{{.Description}}
+
+{{.Link}}
+`
+
 func expandTilde(path string) (string, error) {
 	if !strings.HasPrefix(path, "~/") {
 		return path, nil
@@ -23,29 +30,47 @@ func expandTilde(path string) (string, error) {
 	return filepath.Join(usr.HomeDir, path[2:]), nil
 }
 
+func configDir(c *cli.Context) (string, error) {
+	dir := c.String("config")
+	if dir == "" {
+		dir = ".mastosync"
+	}
+	return expandTilde(dir)
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "mastosync"
-	app.Usage = "Toot each item in an RSS feed"
+	app.Usage = "Toot items from RSS feeds"
+
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:  "config",
+			Value: "",
+			Usage: "path to a directory",
+		},
+	}
 
 	app.Commands = []cli.Command{
 		{
 			Name:    "init",
 			Aliases: []string{"i"},
 			Usage:   "set up the sync directory",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  "dir",
-					Value: "~/.mastosync",
-					Usage: "path to a directory",
-				},
-			},
 			Action: func(c *cli.Context) error {
-				dir, err := expandTilde(c.String("dir"))
+				dir, err := configDir(c)
 				if err != nil {
 					return err
 				}
 				err = os.Mkdir(dir, 0700)
+				if err != nil {
+					return err
+				}
+				err = os.Mkdir(filepath.Join(dir, "templates"), 0700)
+				if err != nil {
+					return err
+				}
+				err = os.WriteFile(filepath.Join(dir, "templates", "someA.tmpl"), []byte(defaultTmplContent),
+					0600)
 				if err != nil {
 					return err
 				}
@@ -65,14 +90,13 @@ func main() {
 			Aliases: []string{"s"},
 			Usage:   "sync RSS feed with mastodon",
 			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  "dir,d",
-					Value: "~/.mastosync",
-					Usage: "path to a mastosync directory",
+				cli.BoolFlag{
+					Name:  "dryrun",
+					Usage: "dryrun the sync",
 				},
 			},
 			Action: func(c *cli.Context) error {
-				dir, err := expandTilde(c.String("dir"))
+				dir, err := configDir(c)
 				if err != nil {
 					return err
 				}
@@ -92,6 +116,7 @@ func main() {
 					dao:        dao,
 					feeds:      cfg.Feeds,
 					tmplDir:    filepath.Join(dir, "templates"),
+					dryrun:     c.Bool("dryrun"),
 				}
 				return syncer.Sync()
 			},
@@ -100,15 +125,8 @@ func main() {
 			Name:    "catchup",
 			Aliases: []string{"c"},
 			Usage:   "catchup DB with RSS feed",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  "dir,d",
-					Value: "~/.mastosync",
-					Usage: "path to a mastosync directory",
-				},
-			},
 			Action: func(c *cli.Context) error {
-				dir, err := expandTilde(c.String("dir"))
+				dir, err := configDir(c)
 				if err != nil {
 					return err
 				}
