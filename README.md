@@ -18,7 +18,10 @@ mastosync init
 ```
 
 It will create the ".mastosync" directory. In there you will find the file "config.yaml". You need to specify your mastodon credentials
-and your RSS feeds together with toot templates that go with each feed.
+and your RSS feeds together with toot templates that go with each feed. The RSS feeds list order is respected and important.
+If you have subfeeds in your blog with specific tags, you can specify them ahead of the general blog feed
+and specify the tags you want in your toots in the templates. That way mastosync will use the
+more specific templates instead of the general template without the tags.
 
 # Catchup
 
