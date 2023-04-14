@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"log"
 	"os"
 	"time"
 )
@@ -41,7 +42,12 @@ func (dao *DAO) FindToot(rssguid string) (*Toot, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			log.Println("Failed to close rows handle")
+		}
+	}(rows)
 
 	var toot Toot
 	var ts string
