@@ -55,7 +55,9 @@ func ConvertHtml2Blocks(content string) notionapi.Blocks {
 				PlainText: node.Data,
 			}
 			if currentHref != "" {
-				rt.Href = currentHref
+				rt.Text.Link = &notionapi.Link{
+					Url: currentHref,
+				}
 			}
 			currentParagraph.Paragraph.RichText = append(currentParagraph.Paragraph.RichText, rt)
 			for child := node.FirstChild; child != nil; child = child.NextSibling {
