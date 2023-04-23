@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/jomei/notionapi"
 	"github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mmcdole/gofeed"
@@ -34,6 +35,13 @@ func configDir(c *cli.Context) (string, error) {
 	dir := c.String("config")
 	if dir == "" {
 		dir = ".mastosync"
+		if _, err := os.Stat(dir); err != nil {
+			usr, err := user.Current()
+			if err != nil {
+				return "", err
+			}
+			dir = filepath.Join(usr.HomeDir, ".mastosync")
+		}
 	}
 	return expandTilde(dir)
 }
@@ -148,6 +156,41 @@ func main() {
 					tmplDir:    filepath.Join(dir, "templates"),
 				}
 				return syncer.Catchup()
+			},
+		},
+		{
+			Name:    "save",
+			Aliases: []string{"n"},
+			Usage:   "save a status to notion",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "dryrun",
+					Usage: "dryrun the sync",
+				},
+				cli.StringFlag{
+					Name:  "id",
+					Usage: "id of toot to save",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				dir, err := configDir(c)
+				if err != nil {
+					return err
+				}
+				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+				if err != nil {
+					return err
+				}
+
+				notionClient := notionapi.NewClient(notionapi.Token(cfg.NotionToken), notionapi.WithRetry(2))
+				mClient := mastodon.NewClient(&cfg.Mas)
+				saver := Saver{
+					mClient:        mClient,
+					dryrun:         c.Bool("dryrun"),
+					notionClient:   notionClient,
+					notionParentID: cfg.NotionParent,
+				}
+				return saver.Save(mastodon.ID(c.String("id")))
 			},
 		},
 	}

@@ -11,8 +11,10 @@ type FeedTemplatePair struct {
 }
 
 type Config struct {
-	Mas   mastodon.Config
-	Feeds []FeedTemplatePair
+	Mas          mastodon.Config
+	Feeds        []FeedTemplatePair
+	NotionToken  string
+	NotionParent string
 }
 
 func InitConfig(path string) error {
@@ -26,6 +28,8 @@ func InitConfig(path string) error {
 	})
 	viper.SetDefault("feeds", []FeedTemplatePair{{"https://someAFeed.com/xml", "someA.tmpl"},
 		{"https://someBFeed.com/xml", "someB.tmpl"}})
+	viper.SetDefault("notiontoken", "some_notion_token")
+	viper.SetDefault("notionparent", "some_notion_parent_page_id")
 	return viper.WriteConfig()
 }
 
