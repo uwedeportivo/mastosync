@@ -11,6 +11,7 @@ type Saver struct {
 	dryrun         bool
 	notionClient   *notionapi.Client
 	notionParentID string
+	pageTitle      string
 }
 
 func reverseThread(thread []*mastodon.Status) {
@@ -69,7 +70,7 @@ func (saver *Saver) Save(id mastodon.ID) error {
 	}
 
 	title := notionapi.Text{
-		Content: thread[0].URL,
+		Content: saver.pageTitle,
 	}
 
 	pageCreateRequest := notionapi.PageCreateRequest{

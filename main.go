@@ -171,6 +171,10 @@ func main() {
 					Name:  "id",
 					Usage: "id of toot to save",
 				},
+				cli.StringFlag{
+					Name:  "title",
+					Usage: "title of the saved page",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				dir, err := configDir(c)
@@ -189,6 +193,7 @@ func main() {
 					dryrun:         c.Bool("dryrun"),
 					notionClient:   notionClient,
 					notionParentID: cfg.NotionParent,
+					pageTitle:      c.String("title"),
 				}
 				return saver.Save(mastodon.ID(c.String("id")))
 			},
