@@ -1,12 +1,23 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
 	"github.com/jomei/notionapi"
 	"github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mmcdole/gofeed"
+	"github.com/pkg/browser"
 	"github.com/urfave/cli"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/drive/v3"
+	"google.golang.org/api/option"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -44,6 +55,24 @@ func configDir(c *cli.Context) (string, error) {
 		}
 	}
 	return expandTilde(dir)
+}
+
+func handleOauthCallback(codeChan chan string) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		queryParts, _ := url.ParseQuery(r.URL.RawQuery)
+
+		// Use the authorization code that is pushed to the redirect URL.
+		code := queryParts["code"][0]
+
+		// write the authorization code to the channel
+		codeChan <- code
+
+		msg := "<p><strong>Authentication successful</strong>. You may now close this tab.</p>"
+		// send a success message to the browser
+		if _, err := fmt.Fprint(w, msg); err != nil {
+			log.Println(err)
+		}
+	}
 }
 
 func main() {
@@ -165,7 +194,15 @@ func main() {
 			Flags: []cli.Flag{
 				cli.BoolFlag{
 					Name:  "dryrun",
-					Usage: "dryrun the sync",
+					Usage: "dryrun the save",
+				},
+				cli.BoolFlag{
+					Name:  "debug",
+					Usage: "debug the save",
+				},
+				cli.BoolFlag{
+					Name:  "usegdrive",
+					Usage: "use gdrive to store media",
 				},
 				cli.StringFlag{
 					Name:  "id",
@@ -188,14 +225,119 @@ func main() {
 
 				notionClient := notionapi.NewClient(notionapi.Token(cfg.NotionToken), notionapi.WithRetry(2))
 				mClient := mastodon.NewClient(&cfg.Mas)
+
+				b, err := os.ReadFile(filepath.Join(dir, "gdrive.json"))
+				if err != nil {
+					return err
+				}
+
+				// If modifying these scopes, delete your previously saved token.json.
+				gdriveConfig, err := google.ConfigFromJSON(b, drive.DriveFileScope)
+				if err != nil {
+					return err
+				}
+
+				tokenFile, err := os.Open(filepath.Join(dir, "gdrive.token"))
+				if err != nil {
+					return err
+				}
+				gdriveToken := &oauth2.Token{}
+				err = json.NewDecoder(tokenFile).Decode(gdriveToken)
+				if err != nil {
+					return err
+				}
+				err = tokenFile.Close()
+				if err != nil {
+					return err
+				}
+				gdriveClient := gdriveConfig.Client(context.Background(), gdriveToken)
+
+				gdriveService, err := drive.NewService(context.Background(),
+					option.WithHTTPClient(gdriveClient))
+				if err != nil {
+					return err
+				}
+
 				saver := Saver{
 					mClient:        mClient,
 					dryrun:         c.Bool("dryrun"),
 					notionClient:   notionClient,
 					notionParentID: cfg.NotionParent,
 					pageTitle:      c.String("title"),
+					gdriveService:  gdriveService,
+					debug:          c.Bool("debug"),
+					usegdrive:      c.Bool("usegdrive"),
 				}
 				return saver.Save(mastodon.ID(c.String("id")))
+			},
+		},
+		{
+			Name:    "auth",
+			Aliases: []string{"a"},
+			Usage:   "refresh oauth token for Google Drive",
+			Action: func(c *cli.Context) error {
+				dir, err := configDir(c)
+				if err != nil {
+					return err
+				}
+				b, err := os.ReadFile(filepath.Join(dir, "gdrive.json"))
+				if err != nil {
+					return err
+				}
+
+				// If modifying these scopes, delete your previously saved token.json.
+				gdriveConfig, err := google.ConfigFromJSON(b, drive.DriveFileScope)
+				if err != nil {
+					return err
+				}
+
+				tr := &http.Transport{
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				}
+				sslcli := &http.Client{Transport: tr}
+				ctx := context.Background()
+				ctx = context.WithValue(ctx, oauth2.HTTPClient, sslcli)
+
+				server := &http.Server{Addr: ":9999"}
+
+				// create a channel to receive the authorization code
+				codeChan := make(chan string)
+
+				http.HandleFunc("/oauth/callback", handleOauthCallback(codeChan))
+
+				go func() {
+					if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+						log.Fatalf("Failed to start server: %v", err)
+					}
+				}()
+
+				// get the OAuth authorization URL
+				authUrl := gdriveConfig.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+
+				// Redirect user to consent page to ask for permission
+				// for the scopes specified above
+				fmt.Printf("Your browser has been opened to visit::\n%s\n", authUrl)
+
+				// open user's browser to login page
+				if err := browser.OpenURL(authUrl); err != nil {
+					panic(fmt.Errorf("failed to open browser for authentication %v", err))
+				}
+
+				authCode := <-codeChan
+				tok, err := gdriveConfig.Exchange(context.Background(), authCode)
+				if err != nil {
+					return err
+				}
+				f, err := os.OpenFile(filepath.Join(dir, "gdrive.token"),
+					os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+				if err != nil {
+					return err
+				}
+				err = json.NewEncoder(f).Encode(tok)
+				if err != nil {
+					return err
+				}
+				return f.Close()
 			},
 		},
 	}

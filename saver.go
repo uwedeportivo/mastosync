@@ -1,12 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/jomei/notionapi"
 	"github.com/mattn/go-mastodon"
 	"golang.org/x/net/html"
+	"google.golang.org/api/drive/v3"
+	"io"
+	"log"
+	"mime"
+	"net/http"
+	"net/url"
+	"path"
 	"strings"
 )
 
@@ -108,6 +116,8 @@ type Saver struct {
 	notionParentID string
 	pageTitle      string
 	debug          bool
+	gdriveService  *drive.Service
+	usegdrive      bool
 }
 
 func reverseThread(thread []*mastodon.Status) {
@@ -119,11 +129,71 @@ func reverseThread(thread []*mastodon.Status) {
 	}
 }
 
+func (saver *Saver) StoreImage(imageURL string, filename string) (*drive.File, error) {
+	resp, err := http.Get(imageURL)
+	if err != nil {
+		return nil, err
+	}
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			log.Println("failed to close response body", err)
+		}
+	}(resp.Body)
+	perm := drive.Permission{
+		Role: "reader",
+		Type: "anyone",
+	}
+	df := drive.File{
+		Name:     filename,
+		MimeType: mime.TypeByExtension(path.Ext(filename)),
+	}
+	dFile, err := saver.gdriveService.Files.Create(&df).Media(resp.Body).Do()
+	if err != nil {
+		return nil, err
+	}
+	_, err = saver.gdriveService.Permissions.Create(dFile.Id, &perm).Do()
+	if err != nil {
+		return nil, err
+	}
+	dFile, err = saver.gdriveService.Files.Get(dFile.Id).Fields("webContentLink").Do()
+	if err != nil {
+		return nil, err
+	}
+	return dFile, nil
+}
+
 func (saver *Saver) Blocks(thread []*mastodon.Status) notionapi.Blocks {
 	var blocks notionapi.Blocks
 	for _, status := range thread {
 		blocks = append(blocks, ConvertHtml2Blocks(status.Content)...)
 		for _, ma := range status.MediaAttachments {
+			remoteURL := ma.RemoteURL
+			if saver.usegdrive {
+				filename := path.Base(remoteURL)
+				dFile, err := saver.StoreImage(remoteURL, filename)
+				if err == nil {
+					if len(dFile.WebContentLink) > 0 {
+						wcl, err := url.Parse(dFile.WebContentLink)
+						if err != nil {
+							log.Println("web content url is invalid: ", err)
+						} else {
+							q := wcl.Query()
+							q.Del("export")
+							q.Add("export", "view")
+							wcl.RawQuery = q.Encode()
+							remoteURL = wcl.String()
+						}
+					} else if saver.debug {
+						log.Println("Google Drive file doesn't have WebContentLink")
+					}
+				} else if saver.debug {
+					log.Println("failed to store image ", remoteURL, " to Google Drive: ", err)
+				}
+				if saver.debug {
+					log.Println("remote URL", remoteURL)
+				}
+			}
 			blocks = append(blocks, notionapi.ImageBlock{
 				BasicBlock: notionapi.BasicBlock{
 					Object: notionapi.ObjectTypeBlock,
@@ -132,7 +202,7 @@ func (saver *Saver) Blocks(thread []*mastodon.Status) notionapi.Blocks {
 				Image: notionapi.Image{
 					Type: notionapi.FileTypeExternal,
 					External: &notionapi.FileObject{
-						URL: ma.RemoteURL,
+						URL: remoteURL,
 					},
 				},
 			})
@@ -192,11 +262,15 @@ func (saver *Saver) Save(id mastodon.ID) error {
 		Children: saver.Blocks(thread),
 	}
 	if saver.debug {
-		pageDebug, err := json.MarshalIndent(pageCreateRequest, "", "    ")
+		var buf bytes.Buffer
+		jenc := json.NewEncoder(&buf)
+		jenc.SetIndent("", "    ")
+		jenc.SetEscapeHTML(false)
+		err := jenc.Encode(pageCreateRequest)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("page request: %s\n", pageDebug)
+		fmt.Printf("page request: %s\n", buf.String())
 	}
 	_, err := saver.notionClient.Page.Create(context.Background(), &pageCreateRequest)
 	if err != nil {
