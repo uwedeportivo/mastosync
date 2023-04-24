@@ -15,6 +15,8 @@ type Config struct {
 	Feeds        []FeedTemplatePair
 	NotionToken  string
 	NotionParent string
+	Bridge       string
+	Parent       string
 }
 
 func InitConfig(path string) error {
@@ -30,6 +32,8 @@ func InitConfig(path string) error {
 		{"https://someBFeed.com/xml", "someB.tmpl"}})
 	viper.SetDefault("notiontoken", "some_notion_token")
 	viper.SetDefault("notionparent", "some_notion_parent_page_id")
+	viper.SetDefault("bridge", "some_bridge")
+	viper.SetDefault("parent", "some_parent_folder_id")
 	return viper.WriteConfig()
 }
 

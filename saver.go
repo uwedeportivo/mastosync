@@ -118,6 +118,8 @@ type Saver struct {
 	debug          bool
 	gdriveService  *drive.Service
 	usegdrive      bool
+	bridge         string
+	parent         string
 }
 
 func reverseThread(thread []*mastodon.Status) {
@@ -147,6 +149,7 @@ func (saver *Saver) StoreImage(imageURL string, filename string) (*drive.File, e
 	df := drive.File{
 		Name:     filename,
 		MimeType: mime.TypeByExtension(path.Ext(filename)),
+		Parents:  []string{saver.parent},
 	}
 	dFile, err := saver.gdriveService.Files.Create(&df).Media(resp.Body).Do()
 	if err != nil {
@@ -178,11 +181,8 @@ func (saver *Saver) Blocks(thread []*mastodon.Status) notionapi.Blocks {
 						if err != nil {
 							log.Println("web content url is invalid: ", err)
 						} else {
-							q := wcl.Query()
-							q.Del("export")
-							q.Add("export", "view")
-							wcl.RawQuery = q.Encode()
-							remoteURL = wcl.String()
+							gdriveId := wcl.Query().Get("id")
+							remoteURL = fmt.Sprintf("%s/%s/%s", saver.bridge, gdriveId, filename)
 						}
 					} else if saver.debug {
 						log.Println("Google Drive file doesn't have WebContentLink")

@@ -2,8 +2,6 @@ module mastosync
 
 go 1.19
 
-replace github.com/jomei/notionapi => /Users/uwe/src/notionapi
-
 require (
 	github.com/jomei/notionapi v1.12.0
 	github.com/mattn/go-mastodon v0.0.6

@@ -267,6 +267,8 @@ func main() {
 					gdriveService:  gdriveService,
 					debug:          c.Bool("debug"),
 					usegdrive:      c.Bool("usegdrive"),
+					bridge:         cfg.Bridge,
+					parent:         cfg.Parent,
 				}
 				return saver.Save(mastodon.ID(c.String("id")))
 			},
