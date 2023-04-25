@@ -22,8 +22,8 @@ import (
 
 var stripTagsPolicy = bluemonday.StripTagsPolicy()
 
-func ExtractTitle(content string) string {
-	strippedContent := stripTagsPolicy.Sanitize(content)
+func ExtractTitle(status *mastodon.Status) string {
+	strippedContent := stripTagsPolicy.Sanitize(status.Content)
 	var s scanner.Scanner
 	s.Init(strings.NewReader(strippedContent))
 	var words []string
@@ -36,7 +36,7 @@ func ExtractTitle(content string) string {
 	if len(words) < 5 {
 		numWords = len(words)
 	}
-	return strings.Join(words[:numWords], " ")
+	return status.Account.Username + ": " + strings.Join(words[:numWords], " ")
 }
 
 func ConvertHtml2Blocks(content string) notionapi.Blocks {
@@ -189,6 +189,26 @@ func (saver *Saver) StoreImage(imageURL string, filename string) (*drive.File, e
 
 func (saver *Saver) Blocks(thread []*mastodon.Status) notionapi.Blocks {
 	var blocks notionapi.Blocks
+	blocks = append(blocks, notionapi.Heading3Block{
+		BasicBlock: notionapi.BasicBlock{
+			Object: notionapi.ObjectTypeBlock,
+			Type:   notionapi.BlockTypeHeading3,
+		},
+		Heading3: notionapi.Heading{
+			RichText: []notionapi.RichText{
+				{
+					Type: notionapi.ObjectTypeText,
+					Text: &notionapi.Text{
+						Content: thread[0].URL,
+						Link: &notionapi.Link{
+							Url: thread[0].URL,
+						},
+					},
+				},
+			},
+			Color: "blue",
+		},
+	})
 	for _, status := range thread {
 		blocks = append(blocks, ConvertHtml2Blocks(status.Content)...)
 		for _, ma := range status.MediaAttachments {
@@ -275,7 +295,7 @@ func (saver *Saver) Save(id mastodon.ID) error {
 	}
 
 	if len(saver.pageTitle) == 0 {
-		saver.pageTitle = ExtractTitle(thread[0].Content)
+		saver.pageTitle = ExtractTitle(thread[0])
 	}
 
 	title := notionapi.Text{
