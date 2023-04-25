@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/jomei/notionapi"
 	"github.com/mattn/go-mastodon"
+	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
 	"google.golang.org/api/drive/v3"
 	"io"
@@ -16,7 +17,27 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"text/scanner"
 )
+
+var stripTagsPolicy = bluemonday.StripTagsPolicy()
+
+func ExtractTitle(content string) string {
+	strippedContent := stripTagsPolicy.Sanitize(content)
+	var s scanner.Scanner
+	s.Init(strings.NewReader(strippedContent))
+	var words []string
+	tok := s.Scan()
+	for tok != scanner.EOF {
+		words = append(words, s.TokenText())
+		tok = s.Scan()
+	}
+	numWords := 5
+	if len(words) < 5 {
+		numWords = len(words)
+	}
+	return strings.Join(words[:numWords], " ")
+}
 
 func ConvertHtml2Blocks(content string) notionapi.Blocks {
 	var blocks notionapi.Blocks
@@ -218,6 +239,18 @@ func (saver *Saver) Blocks(thread []*mastodon.Status) notionapi.Blocks {
 	return blocks
 }
 
+func (saver *Saver) SaveUrl(tootUrl string) error {
+	srs, err := saver.mClient.Search(context.Background(), tootUrl, true)
+	if err != nil {
+		return err
+	}
+	if len(srs.Statuses) > 0 {
+		return saver.Save(srs.Statuses[0].ID)
+	}
+	fmt.Println("toot not found")
+	return nil
+}
+
 func (saver *Saver) Save(id mastodon.ID) error {
 	var thread []*mastodon.Status
 
@@ -237,7 +270,12 @@ func (saver *Saver) Save(id mastodon.ID) error {
 	reverseThread(thread)
 
 	if len(thread) == 0 {
+		fmt.Println("toot not found")
 		return nil
+	}
+
+	if len(saver.pageTitle) == 0 {
+		saver.pageTitle = ExtractTitle(thread[0].Content)
 	}
 
 	title := notionapi.Text{
