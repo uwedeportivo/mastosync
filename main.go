@@ -205,19 +205,14 @@ func main() {
 					Usage: "do not use gdrive to store media, rely on external mastodon server",
 				},
 				cli.StringFlag{
-					Name:  "id",
-					Usage: "id of toot to save",
-				},
-				cli.StringFlag{
-					Name:  "url",
-					Usage: "url of toot to save",
-				},
-				cli.StringFlag{
 					Name:  "title",
 					Usage: "title of the saved page",
 				},
 			},
 			Action: func(c *cli.Context) error {
+				if !c.Args().Present() {
+					return fmt.Errorf("missing toot id or url to save")
+				}
 				dir, err := configDir(c)
 				if err != nil {
 					return err
@@ -274,12 +269,7 @@ func main() {
 					bridge:         cfg.Bridge,
 					parent:         cfg.Parent,
 				}
-				tootUrl := c.String("url")
-				if len(tootUrl) > 0 {
-					return saver.SaveUrl(tootUrl)
-				} else {
-					return saver.Save(mastodon.ID(c.String("id")))
-				}
+				return saver.SaveToot(c.Args().First())
 			},
 		},
 		{

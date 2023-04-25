@@ -337,3 +337,10 @@ func (saver *Saver) Save(id mastodon.ID) error {
 
 	return nil
 }
+
+func (saver *Saver) SaveToot(toot string) error {
+	if strings.HasPrefix(toot, "https://") {
+		return saver.SaveUrl(toot)
+	}
+	return saver.Save(mastodon.ID(toot))
+}
