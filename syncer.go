@@ -59,14 +59,18 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string) error {
 		if err != nil {
 			return err
 		}
+		tootStr := buf.String()
+		if len(tootStr) > 500 {
+			tootStr = tootStr[:500]
+		}
 		if syncer.dryrun {
-			fmt.Println("would be tooting:\n", buf.String())
+			fmt.Println("would be tooting:\n", tootStr)
 			continue
 		} else {
-			fmt.Println("tooting:\n", buf.String())
+			fmt.Println("tooting:\n", tootStr)
 		}
 		toot := mastodon.Toot{
-			Status: buf.String(),
+			Status: tootStr,
 		}
 
 		status, err := syncer.mClient.PostStatus(context.Background(), &toot)
