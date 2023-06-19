@@ -21,8 +21,9 @@ type Syncer struct {
 }
 
 func (syncer *Syncer) Sync() error {
+	var alreadyProcessed map[string]*gofeed.Item
 	for _, feedTmplPair := range syncer.feeds {
-		err := syncer.SyncFeed(feedTmplPair.FeedURL, feedTmplPair.Template)
+		err := syncer.SyncFeed(feedTmplPair.FeedURL, feedTmplPair.Template, alreadyProcessed)
 		if err != nil {
 			return err
 		}
@@ -30,7 +31,8 @@ func (syncer *Syncer) Sync() error {
 	return nil
 }
 
-func (syncer *Syncer) SyncFeed(feedURL string, templatePath string) error {
+func (syncer *Syncer) SyncFeed(feedURL string, templatePath string,
+	alreadyProcessed map[string]*gofeed.Item) error {
 	feed, err := syncer.feedParser.ParseURL(feedURL)
 	if err != nil {
 		return err
@@ -43,10 +45,15 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string) error {
 
 	var outstandingItems []*gofeed.Item
 	for _, item := range feed.Items {
+		_, ap := alreadyProcessed[item.GUID]
+		if ap {
+			continue
+		}
 		toot, err := syncer.dao.FindToot(item.GUID)
 		if err != nil {
 			return err
 		}
+
 		if toot == nil {
 			outstandingItems = append(outstandingItems, item)
 		} else {
@@ -82,6 +89,7 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string) error {
 		if err != nil {
 			return err
 		}
+		alreadyProcessed[item.GUID] = item
 	}
 	return nil
 }
