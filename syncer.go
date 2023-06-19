@@ -72,6 +72,7 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string,
 		}
 		if syncer.dryrun {
 			fmt.Println("would be tooting:\n", tootStr)
+			alreadyProcessed[item.GUID] = item
 			continue
 		} else {
 			fmt.Println("tooting:\n", tootStr)
