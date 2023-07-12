@@ -21,7 +21,7 @@ type Syncer struct {
 }
 
 func (syncer *Syncer) Sync() error {
-	var alreadyProcessed map[string]*gofeed.Item
+	alreadyProcessed := make(map[string]*gofeed.Item)
 	for _, feedTmplPair := range syncer.feeds {
 		err := syncer.SyncFeed(feedTmplPair.FeedURL, feedTmplPair.Template, alreadyProcessed)
 		if err != nil {
