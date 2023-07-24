@@ -271,6 +271,13 @@ func (saver *Saver) SaveUrl(tootUrl string) error {
 	return nil
 }
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func (saver *Saver) Save(id mastodon.ID) error {
 	var thread []*mastodon.Status
 
@@ -298,41 +305,53 @@ func (saver *Saver) Save(id mastodon.ID) error {
 		saver.pageTitle = ExtractTitle(thread[0])
 	}
 
-	title := notionapi.Text{
-		Content: saver.pageTitle,
-	}
+	blocks := saver.Blocks(thread)
 
-	pageCreateRequest := notionapi.PageCreateRequest{
-		Parent: notionapi.Parent{
-			Type:   notionapi.ParentTypePageID,
-			PageID: notionapi.PageID(saver.notionParentID),
-		},
-		Properties: notionapi.Properties{
-			"title": notionapi.TitleProperty{
-				Title: []notionapi.RichText{
-					{
-						Type: notionapi.ObjectTypeText,
-						Text: &title,
+	for i := 0; i <= len(blocks)/100; i++ {
+		titleStr := saver.pageTitle
+		if i > 0 {
+			titleStr = fmt.Sprintf("%s %d", saver.pageTitle, i)
+		}
+		title := notionapi.Text{
+			Content: titleStr,
+		}
+		pageBlocks := blocks[i*100 : min(len(blocks), (i+1)*100)]
+
+		if len(pageBlocks) == 0 {
+			break
+		}
+		pageCreateRequest := notionapi.PageCreateRequest{
+			Parent: notionapi.Parent{
+				Type:   notionapi.ParentTypePageID,
+				PageID: notionapi.PageID(saver.notionParentID),
+			},
+			Properties: notionapi.Properties{
+				"title": notionapi.TitleProperty{
+					Title: []notionapi.RichText{
+						{
+							Type: notionapi.ObjectTypeText,
+							Text: &title,
+						},
 					},
 				},
 			},
-		},
-		Children: saver.Blocks(thread),
-	}
-	if saver.debug {
-		var buf bytes.Buffer
-		jenc := json.NewEncoder(&buf)
-		jenc.SetIndent("", "    ")
-		jenc.SetEscapeHTML(false)
-		err := jenc.Encode(pageCreateRequest)
+			Children: pageBlocks,
+		}
+		if saver.debug {
+			var buf bytes.Buffer
+			jenc := json.NewEncoder(&buf)
+			jenc.SetIndent("", "    ")
+			jenc.SetEscapeHTML(false)
+			err := jenc.Encode(pageCreateRequest)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("page request: %s\n", buf.String())
+		}
+		_, err := saver.notionClient.Page.Create(context.Background(), &pageCreateRequest)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("page request: %s\n", buf.String())
-	}
-	_, err := saver.notionClient.Page.Create(context.Background(), &pageCreateRequest)
-	if err != nil {
-		return err
 	}
 
 	return nil
