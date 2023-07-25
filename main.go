@@ -345,6 +345,21 @@ func main() {
 			Name:    "mandala",
 			Aliases: []string{"m"},
 			Usage:   "post a mandala",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "skip_post",
+					Usage: "generate mandala but don't post",
+				},
+				cli.BoolFlag{
+					Name:  "skip_generate",
+					Usage: "post an exisiting mandala",
+				},
+				cli.StringFlag{
+					Name:  "path",
+					Value: "/tmp/mandala.png",
+					Usage: "path to mandala",
+				},
+			},
 			Action: func(c *cli.Context) error {
 				dir, err := configDir(c)
 				if err != nil {
@@ -357,8 +372,11 @@ func main() {
 
 				mClient := mastodon.NewClient(&cfg.Mas)
 				mandala := Mandala{
-					mClient:    mClient,
-					scriptPath: cfg.Mandala,
+					mClient:      mClient,
+					scriptPath:   cfg.Mandala,
+					mandalaPath:  c.String("path"),
+					skipPost:     c.Bool("skip_post"),
+					skipGenerate: c.Bool("skip_generate"),
 				}
 				return mandala.Post()
 			},

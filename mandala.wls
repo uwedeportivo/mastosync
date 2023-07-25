@@ -1,5 +1,10 @@
 (* code from https://mathematica.stackexchange.com/q/136974 *)
 
+argv = Rest @ $ScriptCommandLine;
+argc = Length @ argv;
+
+mandalaPath = If[argc >=1, argv[[1]], "/tmp/mandala.png"];
+
 randomColor[] :=
   ColorData[
     RandomChoice[{"BrightBands", "IslandColors", "FruitPunchColors", 
@@ -27,4 +32,4 @@ mandala[n_, m_] :=
 
 mandalaImage = RemoveBackground @ mandala[16, 20];
 
-Export["/tmp/mandala.png", mandalaImage];
+Export[mandalaPath, mandalaImage];

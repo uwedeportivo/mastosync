@@ -9,38 +9,47 @@ import (
 )
 
 type Mandala struct {
-	mClient    *mastodon.Client
-	scriptPath string
+	mClient      *mastodon.Client
+	scriptPath   string
+	mandalaPath  string
+	skipPost     bool
+	skipGenerate bool
 }
 
 func (mandala *Mandala) Post() error {
-	cmd := exec.Command("wolframscript", "-file", mandala.scriptPath)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("failed executing mandala script:\n%s\nerror: %v", string(out), err)
-		return err
+	if !mandala.skipGenerate {
+		cmd := exec.Command("wolframscript", "-file", mandala.scriptPath, mandala.mandalaPath)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			fmt.Printf("failed executing mandala script:\n%s\nerror: %v", string(out), err)
+			return err
+		} else {
+			fmt.Printf("executed mandala script:\n%s\n", string(out))
+		}
 	}
-	mandalaFile, err := os.Open("/tmp/mandala.png")
-	if err != nil {
-		return err
-	}
-	defer mandalaFile.Close()
-	mandalaMedia := mastodon.Media{
-		File:        mandalaFile,
-		Description: "Colorful Mandala generated with https://mathematica.stackexchange.com/q/136974",
-	}
-	attachment, err := mandala.mClient.UploadMediaFromMedia(context.Background(), &mandalaMedia)
-	if err != nil {
-		return err
-	}
-	toot := mastodon.Toot{
-		Status:   "#Mondala",
-		MediaIDs: []mastodon.ID{attachment.ID},
-	}
+	if !mandala.skipPost {
+		mandalaFile, err := os.Open(mandala.mandalaPath)
+		if err != nil {
+			return err
+		}
+		defer mandalaFile.Close()
+		mandalaMedia := mastodon.Media{
+			File:        mandalaFile,
+			Description: "Colorful Mandala generated with https://mathematica.stackexchange.com/q/136974",
+		}
+		attachment, err := mandala.mClient.UploadMediaFromMedia(context.Background(), &mandalaMedia)
+		if err != nil {
+			return err
+		}
+		toot := mastodon.Toot{
+			Status:   "#Mondala",
+			MediaIDs: []mastodon.ID{attachment.ID},
+		}
 
-	_, err = mandala.mClient.PostStatus(context.Background(), &toot)
-	if err != nil {
-		return err
+		_, err = mandala.mClient.PostStatus(context.Background(), &toot)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
