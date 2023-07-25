@@ -17,6 +17,7 @@ type Config struct {
 	NotionParent string
 	Bridge       string
 	Parent       string
+	Mandala      string
 }
 
 func InitConfig(path string) error {
@@ -34,6 +35,7 @@ func InitConfig(path string) error {
 	viper.SetDefault("notionparent", "some_notion_parent_page_id")
 	viper.SetDefault("bridge", "some_bridge")
 	viper.SetDefault("parent", "some_parent_folder_id")
+	viper.SetDefault("mandala", "some_mandala_script")
 	return viper.WriteConfig()
 }
 

@@ -341,6 +341,28 @@ func main() {
 				return f.Close()
 			},
 		},
+		{
+			Name:    "mandala",
+			Aliases: []string{"m"},
+			Usage:   "post a mandala",
+			Action: func(c *cli.Context) error {
+				dir, err := configDir(c)
+				if err != nil {
+					return err
+				}
+				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+				if err != nil {
+					return err
+				}
+
+				mClient := mastodon.NewClient(&cfg.Mas)
+				mandala := Mandala{
+					mClient:    mClient,
+					scriptPath: cfg.Mandala,
+				}
+				return mandala.Post()
+			},
+		},
 	}
 	err := app.Run(os.Args)
 	if err != nil {
