@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/jomei/notionapi"
 	"github.com/mattn/go-mastodon"
@@ -307,7 +308,7 @@ func main() {
 				http.HandleFunc("/oauth/callback", handleOauthCallback(codeChan))
 
 				go func() {
-					if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+					if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 						log.Fatalf("Failed to start server: %v", err)
 					}
 				}()
