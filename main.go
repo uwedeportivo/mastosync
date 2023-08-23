@@ -360,6 +360,11 @@ func main() {
 					Value: "/tmp/mandala.png",
 					Usage: "path to mandala",
 				},
+				cli.StringFlag{
+					Name:  "toot",
+					Value: "",
+					Usage: "toot extra text if specified",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				dir, err := configDir(c)
@@ -378,6 +383,7 @@ func main() {
 					mandalaPath:  c.String("path"),
 					skipPost:     c.Bool("skip_post"),
 					skipGenerate: c.Bool("skip_generate"),
+					tootText:     c.String("toot"),
 				}
 				return mandala.Post()
 			},

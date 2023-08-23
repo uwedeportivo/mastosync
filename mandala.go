@@ -14,6 +14,7 @@ type Mandala struct {
 	mandalaPath  string
 	skipPost     bool
 	skipGenerate bool
+	tootText     string
 }
 
 func (mandala *Mandala) Post() error {
@@ -44,6 +45,10 @@ func (mandala *Mandala) Post() error {
 		toot := mastodon.Toot{
 			Status:   "#Mondala",
 			MediaIDs: []mastodon.ID{attachment.ID},
+		}
+
+		if mandala.tootText != "" {
+			toot.Status += " " + mandala.tootText
 		}
 
 		_, err = mandala.mClient.PostStatus(context.Background(), &toot)
