@@ -347,18 +347,14 @@ func main() {
 			Aliases: []string{"m"},
 			Usage:   "post a mandala",
 			Flags: []cli.Flag{
-				cli.BoolFlag{
-					Name:  "skip_post",
-					Usage: "generate mandala but don't post",
-				},
-				cli.BoolFlag{
-					Name:  "skip_generate",
-					Usage: "post an exisiting mandala",
+				cli.StringFlag{
+					Name:  "choose",
+					Usage: "choose which one to toot ",
 				},
 				cli.StringFlag{
 					Name:  "path",
-					Value: "/tmp/mandala.png",
-					Usage: "path to mandala",
+					Value: "/tmp",
+					Usage: "path to directory with mandalas",
 				},
 				cli.StringFlag{
 					Name:  "toot",
@@ -378,12 +374,11 @@ func main() {
 
 				mClient := mastodon.NewClient(&cfg.Mas)
 				mandala := Mandala{
-					mClient:      mClient,
-					scriptPath:   cfg.Mandala,
-					mandalaPath:  c.String("path"),
-					skipPost:     c.Bool("skip_post"),
-					skipGenerate: c.Bool("skip_generate"),
-					tootText:     c.String("toot"),
+					mClient:     mClient,
+					scriptPath:  cfg.Mandala,
+					mandalaPath: c.String("path"),
+					choose:      c.String("choose"),
+					tootText:    c.String("toot"),
 				}
 				return mandala.Post()
 			},

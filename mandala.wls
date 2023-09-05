@@ -30,6 +30,20 @@ mandala[n_, m_] :=
       RandomReal[{3, 6}], i]~Rotate~(Pi i/n), {i, m, 1, -1}]}, 
   PlotRange -> All]
 
-mandalaImage = RemoveBackground @ mandala[16, 20];
+spikeyMandala[] := Module[{mandalas, mandalaImages},
+  mandalas = Table[ResourceFunction["RandomMandala"][], 36];
+  mandalaImages =
+    Map[Image[#, ImageSize -> {400, 400}, ColorSpace -> "Grayscale"] &,
+     mandalas];
+   RemoveBackground@
+     ImageAdjust[
+      Blend[
+       Colorize[#,
+          ColorFunction ->
+           RandomChoice[{"IslandColors", "FruitPunchColors",
+             "AvocadoColors", "Rainbow"}]] & /@
+        RandomChoice[mandalaImages, 4], RandomReal[1, 4]]]
+];
 
-Export[mandalaPath, mandalaImage];
+For[i = 0, i < 10, i++, Export[FileNameJoin[{mandalaPath, "mandala" <> ToString[i] <> ".png"}], RemoveBackground @ mandala[16, 20]]];
+For[i = 0, i < 10, i++, Export[FileNameJoin[{mandalaPath, "spikeyMandala" <> ToString[i] <> ".png"}], spikeyMandala[]]];

@@ -6,19 +6,19 @@ import (
 	"github.com/mattn/go-mastodon"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
 
 type Mandala struct {
-	mClient      *mastodon.Client
-	scriptPath   string
-	mandalaPath  string
-	skipPost     bool
-	skipGenerate bool
-	tootText     string
+	mClient     *mastodon.Client
+	scriptPath  string
+	mandalaPath string
+	choose      string
+	tootText    string
 }
 
 func (mandala *Mandala) Post() error {
-	if !mandala.skipGenerate {
+	if mandala.choose == "" {
 		cmd := exec.Command("wolframscript", "-file", mandala.scriptPath, mandala.mandalaPath)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
@@ -27,9 +27,8 @@ func (mandala *Mandala) Post() error {
 		} else {
 			fmt.Printf("executed mandala script:\n%s\n", string(out))
 		}
-	}
-	if !mandala.skipPost {
-		mandalaFile, err := os.Open(mandala.mandalaPath)
+	} else {
+		mandalaFile, err := os.Open(filepath.Join(mandala.mandalaPath, mandala.choose))
 		if err != nil {
 			return err
 		}
