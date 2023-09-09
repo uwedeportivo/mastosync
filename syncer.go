@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/mattn/go-mastodon"
-	"github.com/mmcdole/gofeed"
 	"path/filepath"
 	"text/template"
 	"time"
+
+	"github.com/mattn/go-mastodon"
+	"github.com/mmcdole/gofeed"
 )
 
 type Syncer struct {

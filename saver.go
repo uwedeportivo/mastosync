@@ -5,11 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/jomei/notionapi"
-	"github.com/mattn/go-mastodon"
-	"github.com/microcosm-cc/bluemonday"
-	"golang.org/x/net/html"
-	"google.golang.org/api/drive/v3"
 	"io"
 	"log"
 	"mime"
@@ -18,6 +13,12 @@ import (
 	"path"
 	"strings"
 	"text/scanner"
+
+	"github.com/jomei/notionapi"
+	"github.com/mattn/go-mastodon"
+	"github.com/microcosm-cc/bluemonday"
+	"golang.org/x/net/html"
+	"google.golang.org/api/drive/v3"
 )
 
 var stripTagsPolicy = bluemonday.StripTagsPolicy()

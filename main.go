@@ -6,6 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"os/user"
+	"path/filepath"
+	"strings"
+
 	"github.com/jomei/notionapi"
 	"github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
@@ -16,13 +24,6 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
-	"log"
-	"net/http"
-	"net/url"
-	"os"
-	"os/user"
-	"path/filepath"
-	"strings"
 )
 
 const defaultTmplContent string = `{{.Title}}

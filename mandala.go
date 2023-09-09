@@ -3,10 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/mattn/go-mastodon"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/mattn/go-mastodon"
 )
 
 type Mandala struct {
