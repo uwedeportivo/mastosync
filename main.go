@@ -15,14 +15,14 @@ import (
 	"strings"
 
 	"github.com/jomei/notionapi"
-	"github.com/mattn/go-mastodon"
+	mdon "github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mmcdole/gofeed"
 	"github.com/pkg/browser"
 	"github.com/urfave/cli"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	"google.golang.org/api/drive/v3"
+	googdrive "google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 )
 
@@ -148,7 +148,7 @@ func main() {
 					return err
 				}
 
-				mClient := mastodon.NewClient(&cfg.Mas)
+				mClient := mdon.NewClient(&cfg.Mas)
 				syncer := Syncer{
 					feedParser: gofeed.NewParser(),
 					mClient:    mClient,
@@ -178,7 +178,7 @@ func main() {
 					return err
 				}
 
-				mClient := mastodon.NewClient(&cfg.Mas)
+				mClient := mdon.NewClient(&cfg.Mas)
 				syncer := Syncer{
 					feedParser: gofeed.NewParser(),
 					mClient:    mClient,
@@ -225,7 +225,7 @@ func main() {
 				}
 
 				notionClient := notionapi.NewClient(notionapi.Token(cfg.NotionToken), notionapi.WithRetry(2))
-				mClient := mastodon.NewClient(&cfg.Mas)
+				mClient := mdon.NewClient(&cfg.Mas)
 
 				b, err := os.ReadFile(filepath.Join(dir, "gdrive.json"))
 				if err != nil {
@@ -233,7 +233,7 @@ func main() {
 				}
 
 				// If modifying these scopes, delete your previously saved token.json.
-				gdriveConfig, err := google.ConfigFromJSON(b, drive.DriveFileScope)
+				gdriveConfig, err := google.ConfigFromJSON(b, googdrive.DriveFileScope)
 				if err != nil {
 					return err
 				}
@@ -253,7 +253,7 @@ func main() {
 				}
 				gdriveClient := gdriveConfig.Client(context.Background(), gdriveToken)
 
-				gdriveService, err := drive.NewService(context.Background(),
+				gdriveService, err := googdrive.NewService(context.Background(),
 					option.WithHTTPClient(gdriveClient))
 				if err != nil {
 					return err
@@ -289,7 +289,7 @@ func main() {
 				}
 
 				// If modifying these scopes, delete your previously saved token.json.
-				gdriveConfig, err := google.ConfigFromJSON(b, drive.DriveFileScope)
+				gdriveConfig, err := google.ConfigFromJSON(b, googdrive.DriveFileScope)
 				if err != nil {
 					return err
 				}
@@ -373,7 +373,7 @@ func main() {
 					return err
 				}
 
-				mClient := mastodon.NewClient(&cfg.Mas)
+				mClient := mdon.NewClient(&cfg.Mas)
 				mandala := Mandala{
 					mClient:     mClient,
 					scriptPath:  cfg.Mandala,
