@@ -15,15 +15,15 @@ import (
 	"text/scanner"
 
 	"github.com/jomei/notionapi"
-	"github.com/mattn/go-mastodon"
+	mdon "github.com/mattn/go-mastodon"
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
-	"google.golang.org/api/drive/v3"
+	googdrive "google.golang.org/api/drive/v3"
 )
 
 var stripTagsPolicy = bluemonday.StripTagsPolicy()
 
-func ExtractTitle(status *mastodon.Status) string {
+func ExtractTitle(status *mdon.Status) string {
 	strippedContent := stripTagsPolicy.Sanitize(status.Content)
 	var s scanner.Scanner
 	s.Init(strings.NewReader(strippedContent))
@@ -132,19 +132,19 @@ func ConvertHtml2Blocks(content string) notionapi.Blocks {
 }
 
 type Saver struct {
-	mClient        *mastodon.Client
+	mClient        *mdon.Client
 	dryrun         bool
 	notionClient   *notionapi.Client
 	notionParentID string
 	pageTitle      string
 	debug          bool
-	gdriveService  *drive.Service
+	gdriveService  *googdrive.Service
 	usegdrive      bool
 	bridge         string
 	parent         string
 }
 
-func reverseThread(thread []*mastodon.Status) {
+func reverseThread(thread []*mdon.Status) {
 	i, j := 0, len(thread)-1
 
 	for i < j {
@@ -153,7 +153,7 @@ func reverseThread(thread []*mastodon.Status) {
 	}
 }
 
-func (saver *Saver) StoreImage(imageURL string, filename string) (*drive.File, error) {
+func (saver *Saver) StoreImage(imageURL string, filename string) (*googdrive.File, error) {
 	resp, err := http.Get(imageURL)
 	if err != nil {
 		return nil, err
@@ -164,11 +164,11 @@ func (saver *Saver) StoreImage(imageURL string, filename string) (*drive.File, e
 			log.Println("failed to close response body", err)
 		}
 	}(resp.Body)
-	perm := drive.Permission{
+	perm := googdrive.Permission{
 		Role: "reader",
 		Type: "anyone",
 	}
-	df := drive.File{
+	df := googdrive.File{
 		Name:     filename,
 		MimeType: mime.TypeByExtension(path.Ext(filename)),
 		Parents:  []string{saver.parent},
@@ -188,7 +188,7 @@ func (saver *Saver) StoreImage(imageURL string, filename string) (*drive.File, e
 	return dFile, nil
 }
 
-func (saver *Saver) Blocks(thread []*mastodon.Status) notionapi.Blocks {
+func (saver *Saver) Blocks(thread []*mdon.Status) notionapi.Blocks {
 	var blocks notionapi.Blocks
 	blocks = append(blocks, notionapi.Heading3Block{
 		BasicBlock: notionapi.BasicBlock{
@@ -272,15 +272,8 @@ func (saver *Saver) SaveUrl(tootUrl string) error {
 	return nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func (saver *Saver) Save(id mastodon.ID) error {
-	var thread []*mastodon.Status
+func (saver *Saver) Save(id mdon.ID) error {
+	var thread []*mdon.Status
 
 	for id != "" {
 		status, err := saver.mClient.GetStatus(context.Background(), id)
@@ -290,7 +283,7 @@ func (saver *Saver) Save(id mastodon.ID) error {
 		thread = append(thread, status)
 		if status.InReplyToID != nil {
 			prevId := status.InReplyToID.(string)
-			id = mastodon.ID(prevId)
+			id = mdon.ID(prevId)
 		} else {
 			id = ""
 		}
@@ -362,5 +355,5 @@ func (saver *Saver) SaveToot(toot string) error {
 	if strings.HasPrefix(toot, "https://") {
 		return saver.SaveUrl(toot)
 	}
-	return saver.Save(mastodon.ID(toot))
+	return saver.Save(mdon.ID(toot))
 }

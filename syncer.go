@@ -8,13 +8,13 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/mattn/go-mastodon"
+	mdon "github.com/mattn/go-mastodon"
 	"github.com/mmcdole/gofeed"
 )
 
 type Syncer struct {
 	feedParser *gofeed.Parser
-	mClient    *mastodon.Client
+	mClient    *mdon.Client
 	dao        *DAO
 	feeds      []FeedTemplatePair
 	tmplDir    string
@@ -78,7 +78,7 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string,
 		} else {
 			fmt.Println("tooting:\n", tootStr)
 		}
-		toot := mastodon.Toot{
+		toot := mdon.Toot{
 			Status: tootStr,
 		}
 

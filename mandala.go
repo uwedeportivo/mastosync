@@ -7,11 +7,11 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/mattn/go-mastodon"
+	mdon "github.com/mattn/go-mastodon"
 )
 
 type Mandala struct {
-	mClient     *mastodon.Client
+	mClient     *mdon.Client
 	scriptPath  string
 	mandalaPath string
 	choose      string
@@ -34,7 +34,7 @@ func (mandala *Mandala) Post() error {
 			return err
 		}
 		defer mandalaFile.Close()
-		mandalaMedia := mastodon.Media{
+		mandalaMedia := mdon.Media{
 			File:        mandalaFile,
 			Description: "Colorful Mandala generated with https://mathematica.stackexchange.com/q/136974",
 		}
@@ -42,9 +42,9 @@ func (mandala *Mandala) Post() error {
 		if err != nil {
 			return err
 		}
-		toot := mastodon.Toot{
+		toot := mdon.Toot{
 			Status:   "#Mondala",
-			MediaIDs: []mastodon.ID{attachment.ID},
+			MediaIDs: []mdon.ID{attachment.ID},
 		}
 
 		if mandala.tootText != "" {
