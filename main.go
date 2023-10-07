@@ -200,9 +200,19 @@ func main() {
 
 				tokenizer := sentences.NewSentenceTokenizer(training)
 
+				tootsPath := c.String("toots")
+
+				if !filepath.IsAbs(tootsPath) {
+					absTootsPath, err := filepath.Abs(tootsPath)
+					if err != nil {
+						return err
+					}
+					tootsPath = absTootsPath
+				}
+
 				tooter := Tooter{
 					mClient:   mClient,
-					tootsPath: c.String("toots"),
+					tootsPath: tootsPath,
 					dryrun:    c.Bool("dryrun"),
 					tokenizer: tokenizer,
 				}
