@@ -18,6 +18,8 @@ import (
 	mdon "github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/mmcdole/gofeed"
+	"github.com/neurosnap/sentences"
+	td "github.com/neurosnap/sentences/data"
 	"github.com/pkg/browser"
 	"github.com/urfave/cli"
 	"golang.org/x/oauth2"
@@ -158,6 +160,53 @@ func main() {
 					dryrun:     c.Bool("dryrun"),
 				}
 				return syncer.Sync()
+			},
+		},
+		{
+			Name:    "chain",
+			Aliases: []string{"x"},
+			Usage:   "post a chain of toots",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "dryrun",
+					Usage: "dryrun the posting",
+				},
+				cli.StringFlag{
+					Name:  "toots",
+					Usage: "path to a txt file containing the toot chain",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				dir, err := configDir(c)
+				if err != nil {
+					return err
+				}
+				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+				if err != nil {
+					return err
+				}
+
+				mClient := mdon.NewClient(&cfg.Mas)
+
+				b, err := td.Asset("data/english.json")
+				if err != nil {
+					return err
+				}
+
+				training, err := sentences.LoadTraining(b)
+				if err != nil {
+					return err
+				}
+
+				tokenizer := sentences.NewSentenceTokenizer(training)
+
+				tooter := Tooter{
+					mClient:   mClient,
+					tootsPath: c.String("toots"),
+					dryrun:    c.Bool("dryrun"),
+					tokenizer: tokenizer,
+				}
+				return tooter.Toot()
 			},
 		},
 		{

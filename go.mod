@@ -8,6 +8,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.17
 	github.com/microcosm-cc/bluemonday v1.0.25
 	github.com/mmcdole/gofeed v1.2.1
+	github.com/neurosnap/sentences v1.1.2
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8
 	github.com/spf13/viper v1.16.0
 	github.com/urfave/cli v1.22.14
