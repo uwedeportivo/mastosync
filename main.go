@@ -408,10 +408,6 @@ func main() {
 			Usage:   "post a mandala",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  "choose",
-					Usage: "choose which one to toot ",
-				},
-				cli.StringFlag{
 					Name:  "path",
 					Value: "/tmp",
 					Usage: "path to directory with mandalas",
@@ -437,7 +433,6 @@ func main() {
 					mClient:     mClient,
 					scriptPath:  cfg.Mandala,
 					mandalaPath: c.String("path"),
-					choose:      c.String("choose"),
 					tootText:    c.String("toot"),
 				}
 				return mandala.Post()

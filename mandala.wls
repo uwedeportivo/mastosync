@@ -30,4 +30,4 @@ mandala[n_, m_] :=
       RandomReal[{3, 6}], i]~Rotate~(Pi i/n), {i, m, 1, -1}]}, 
   PlotRange -> All]
 
-For[i = 0, i < 10, i++, Export[FileNameJoin[{mandalaPath, "mandala" <> ToString[i] <> ".png"}], RemoveBackground @ mandala[16, 20]]];
+Export[FileNameJoin[{mandalaPath, "mandala.png"}], RemoveBackground @ mandala[16, 20]];
