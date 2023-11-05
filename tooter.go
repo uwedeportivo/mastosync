@@ -99,7 +99,7 @@ func (ttr *Tooter) Toot() error {
 
 		for _, sx := range sxs {
 			tootStr := sx.Text
-			if sb.Len()+len(tootStr) >= 500 {
+			if sb.Len()+len(tootStr) >= 490 {
 				tootStr = strings.TrimLeftFunc(tootStr, unicode.IsSpace)
 				tootStrs = append(tootStrs, sb.String())
 				sb.Reset()
@@ -119,10 +119,11 @@ func (ttr *Tooter) Toot() error {
 	var previousStatus *mdon.Status
 
 	var overallIndex int
-	for _, tootStr := range tootStrs {
+	for tootIdx, tootStr := range tootStrs {
 		tootEndIndex := overallIndex + len(tootStr)
 
 		tootStr = strings.TrimSpace(tootStr)
+		tootStr = fmt.Sprintf("%d/%d\n%s", tootIdx+1, len(tootStrs), tootStr)
 		var mids []mdon.ID
 		var imagePaths []string
 		lastAssignedIndex := -1
