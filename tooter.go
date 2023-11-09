@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -27,8 +28,20 @@ type TootImage struct {
 	mediaID mdon.ID
 }
 
+var letters = []rune("abcdefghijklmnopqrstuvwxyz")
+
+func randSeq(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
+}
+
 var tootSeparator = regexp.MustCompile("(?m)^===$")
 var mediaMarkdown = regexp.MustCompile(`!\[(?P<AltText>[^\]]*)\]\((?P<Path>.*?)\s*(?P<Title>"(?:.*[^"])")?\s*\)`)
+var linkMarkdown = regexp.MustCompile(`\[(?P<Text>[^\]]*)\]\((?P<Link>.*?)\)`)
+var linkPlaceholder = regexp.MustCompile(`xx(?P<Key>[a-z]+)xx`)
 
 func (ttr *Tooter) ResolvePath(path string) string {
 	if filepath.IsAbs(path) {
@@ -89,6 +102,19 @@ func (ttr *Tooter) Toot() error {
 
 	tootTextWithoutMedia := mediaMarkdown.ReplaceAllString(tootText, "")
 
+	keyToLink := make(map[string]string)
+
+	tootTextWithoutMedia = linkMarkdown.ReplaceAllStringFunc(tootTextWithoutMedia, func(matched string) string {
+		openParen := strings.Index(matched, "(")
+		link := matched[openParen+1 : len(matched)-1]
+		key := "xx" + randSeq(19) + "xx"
+		for keyToLink[key] != "" {
+			key = "xx" + randSeq(19) + "xx"
+		}
+		keyToLink[key] = link
+		return key
+	})
+
 	var tootStrs []string
 	var sb strings.Builder
 
@@ -121,8 +147,14 @@ func (ttr *Tooter) Toot() error {
 	var overallIndex int
 	for tootIdx, tootStr := range tootStrs {
 		tootEndIndex := overallIndex + len(tootStr)
+		overallIndex += len(tootStr)
 
 		tootStr = strings.TrimSpace(tootStr)
+
+		tootStr = linkPlaceholder.ReplaceAllStringFunc(tootStr, func(matched string) string {
+			return keyToLink[matched]
+		})
+
 		tootStr = fmt.Sprintf("%d/%d\n%s", tootIdx+1, len(tootStrs), tootStr)
 		var mids []mdon.ID
 		var imagePaths []string
@@ -138,7 +170,6 @@ func (ttr *Tooter) Toot() error {
 		}
 		tootImages = tootImages[lastAssignedIndex+1:]
 
-		overallIndex += len(tootStr)
 		if ttr.dryrun {
 			fmt.Println("toot text: ", tootStr)
 			fmt.Println("toot imgs: ", imagePaths)
