@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	skybot "github.com/danrusei/gobot-bsky"
 	"github.com/jomei/notionapi"
 	mdon "github.com/mattn/go-mastodon"
 	_ "github.com/mattn/go-sqlite3"
@@ -151,9 +152,23 @@ func main() {
 				}
 
 				mClient := mdon.NewClient(&cfg.Mas)
+
+				var blueAgent *skybot.BskyAgent
+
+				if cfg.BlueSky.APIKey != "" {
+					ctx := context.Background()
+
+					agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
+					err := agent.Connect(ctx)
+					if err != nil {
+						return err
+					}
+					blueAgent = &agent
+				}
 				syncer := Syncer{
 					feedParser: gofeed.NewParser(),
 					mClient:    mClient,
+					skyAgent:   blueAgent,
 					dao:        dao,
 					feeds:      cfg.Feeds,
 					tmplDir:    filepath.Join(dir, "templates"),

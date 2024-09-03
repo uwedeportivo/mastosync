@@ -4,17 +4,23 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
+	"net/url"
 	"path/filepath"
 	"text/template"
 	"time"
 
+	skybot "github.com/danrusei/gobot-bsky"
 	mdon "github.com/mattn/go-mastodon"
 	"github.com/mmcdole/gofeed"
 )
 
+const kMaxBlueSkyGraphemes = 300
+
 type Syncer struct {
 	feedParser *gofeed.Parser
 	mClient    *mdon.Client
+	skyAgent   *skybot.BskyAgent
 	dao        *DAO
 	feeds      []FeedTemplatePair
 	tmplDir    string
@@ -92,6 +98,13 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string,
 			return err
 		}
 		alreadyProcessed[item.GUID] = item
+
+		if syncer.skyAgent != nil {
+			err = syncer.PostToBlueSky(item)
+			if err != nil {
+				log.Println("posting to bluesky failed:", err, item.GUID)
+			}
+		}
 	}
 	return nil
 }
@@ -118,6 +131,26 @@ func (syncer *Syncer) CatchupFeed(feedURL string) error {
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (syncer *Syncer) PostToBlueSky(item *gofeed.Item) error {
+	u, err := url.Parse(item.Link)
+	if err != nil {
+		return err
+	}
+	post, err := skybot.NewPostBuilder(item.Description[:kMaxBlueSkyGraphemes]).
+		WithExternalLink(item.Title, *u, item.Title).
+		Build()
+	if err != nil {
+		return err
+	}
+
+	ctx := context.Background()
+	_, _, err = syncer.skyAgent.PostToFeed(ctx, post)
+	if err != nil {
+		return err
 	}
 	return nil
 }

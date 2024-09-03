@@ -10,6 +10,11 @@ type FeedTemplatePair struct {
 	Template string
 }
 
+type BlueSkyConfig struct {
+	Handle string
+	APIKey string
+}
+
 type Config struct {
 	Mas          mastodon.Config
 	Feeds        []FeedTemplatePair
@@ -18,6 +23,7 @@ type Config struct {
 	Bridge       string
 	Parent       string
 	Mandala      string
+	BlueSky      BlueSkyConfig
 }
 
 func InitConfig(path string) error {
@@ -36,6 +42,9 @@ func InitConfig(path string) error {
 	viper.SetDefault("bridge", "some_bridge")
 	viper.SetDefault("parent", "some_parent_folder_id")
 	viper.SetDefault("mandala", "some_mandala_script")
+	viper.SetDefault("bluesky", BlueSkyConfig{
+		Handle: "some_bluesky_handle",
+		APIKey: "some_api_key"})
 	return viper.WriteConfig()
 }
 
