@@ -140,7 +140,11 @@ func (syncer *Syncer) PostToBlueSky(item *gofeed.Item) error {
 	if err != nil {
 		return err
 	}
-	post, err := skybot.NewPostBuilder(item.Description[:kMaxBlueSkyGraphemes]).
+	cappedLength := len(item.Description)
+	if cappedLength > kMaxBlueSkyGraphemes {
+		cappedLength = kMaxBlueSkyGraphemes
+	}
+	post, err := skybot.NewPostBuilder(item.Description[:cappedLength]).
 		WithExternalLink(item.Title, *u, item.Title).
 		Build()
 	if err != nil {
