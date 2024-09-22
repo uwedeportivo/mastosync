@@ -21,7 +21,7 @@ type Syncer struct {
 func (syncer *Syncer) Sync() error {
 	alreadyProcessed := make(map[string]*gofeed.Item)
 	for _, feedTmplPair := range syncer.feeds {
-		err := syncer.SyncFeed(feedTmplPair.FeedURL, feedTmplPair.Template, feedTmplPair.Tags, alreadyProcessed)
+		err := syncer.SyncFeed(feedTmplPair.FeedURL, feedTmplPair.Template, alreadyProcessed)
 		if err != nil {
 			return err
 		}
@@ -29,7 +29,7 @@ func (syncer *Syncer) Sync() error {
 	return nil
 }
 
-func (syncer *Syncer) SyncFeed(feedURL string, templatePath string, tags []string,
+func (syncer *Syncer) SyncFeed(feedURL string, templatePath string,
 	alreadyProcessed map[string]*gofeed.Item) error {
 	feed, err := syncer.feedParser.ParseURL(feedURL)
 	if err != nil {
@@ -64,7 +64,7 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string, tags []strin
 			alreadyProcessed[item.GUID] = item
 			continue
 		}
-		postID, err := syncer.poster.Post(item, tmpl, tags)
+		postID, err := syncer.poster.Post(item, tmpl)
 		if err != nil {
 			return err
 		}
