@@ -1,26 +1,17 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"fmt"
-	"log"
-	"net/url"
 	"path/filepath"
 	"text/template"
 	"time"
 
-	skybot "github.com/danrusei/gobot-bsky"
-	mdon "github.com/mattn/go-mastodon"
 	"github.com/mmcdole/gofeed"
 )
 
-const kMaxBlueSkyGraphemes = 300
-
 type Syncer struct {
 	feedParser *gofeed.Parser
-	mClient    *mdon.Client
-	skyAgent   *skybot.BskyAgent
+	poster     Poster
 	dao        *DAO
 	feeds      []FeedTemplatePair
 	tmplDir    string
@@ -68,43 +59,21 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string,
 		}
 	}
 	for _, item := range outstandingItems {
-		buf := new(bytes.Buffer)
-		err = tmpl.Execute(buf, item)
-		if err != nil {
-			return err
-		}
-		tootStr := buf.String()
-		if len(tootStr) > 500 {
-			tootStr = tootStr[:500]
-		}
 		if syncer.dryrun {
-			fmt.Println("would be tooting:\n", tootStr)
+			fmt.Println("would be tooting:\n", item.Title)
 			alreadyProcessed[item.GUID] = item
 			continue
-		} else {
-			fmt.Println("tooting:\n", tootStr)
 		}
-		toot := mdon.Toot{
-			Status: tootStr,
-		}
-
-		status, err := syncer.mClient.PostStatus(context.Background(), &toot)
+		postID, err := syncer.poster.Post(item, tmpl)
 		if err != nil {
 			return err
 		}
 
-		err = syncer.dao.RecordSync(item.GUID, string(status.ID), time.Now())
+		err = syncer.dao.RecordSync(item.GUID, postID, time.Now())
 		if err != nil {
 			return err
 		}
 		alreadyProcessed[item.GUID] = item
-
-		if syncer.skyAgent != nil {
-			err = syncer.PostToBlueSky(item)
-			if err != nil {
-				log.Println("posting to bluesky failed:", err, item.GUID)
-			}
-		}
 	}
 	return nil
 }
@@ -131,30 +100,6 @@ func (syncer *Syncer) CatchupFeed(feedURL string) error {
 		if err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func (syncer *Syncer) PostToBlueSky(item *gofeed.Item) error {
-	u, err := url.Parse(item.Link)
-	if err != nil {
-		return err
-	}
-	cappedLength := len(item.Description)
-	if cappedLength > kMaxBlueSkyGraphemes {
-		cappedLength = kMaxBlueSkyGraphemes
-	}
-	post, err := skybot.NewPostBuilder(item.Description[:cappedLength]).
-		WithExternalLink(item.Title, *u, item.Title).
-		Build()
-	if err != nil {
-		return err
-	}
-
-	ctx := context.Background()
-	_, _, err = syncer.skyAgent.PostToFeed(ctx, post)
-	if err != nil {
-		return err
 	}
 	return nil
 }

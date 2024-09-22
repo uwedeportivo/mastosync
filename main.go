@@ -124,6 +124,10 @@ func main() {
 				if err != nil {
 					return err
 				}
+				err = CreateDB(filepath.Join(dir, "skysync.sqlite3"))
+				if err != nil {
+					return err
+				}
 				return nil
 			},
 		},
@@ -153,22 +157,59 @@ func main() {
 
 				mClient := mdon.NewClient(&cfg.Mas)
 
-				var blueAgent *skybot.BskyAgent
-
-				if cfg.BlueSky.APIKey != "" {
-					ctx := context.Background()
-
-					agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
-					err := agent.Connect(ctx)
-					if err != nil {
-						return err
-					}
-					blueAgent = &agent
+				poster := &MastodonPoster{
+					mClient: mClient,
 				}
 				syncer := Syncer{
 					feedParser: gofeed.NewParser(),
-					mClient:    mClient,
-					skyAgent:   blueAgent,
+					poster:     poster,
+					dao:        dao,
+					feeds:      cfg.Feeds,
+					tmplDir:    filepath.Join(dir, "templates"),
+					dryrun:     c.Bool("dryrun"),
+				}
+				return syncer.Sync()
+			},
+		},
+		{
+			Name:    "skysync",
+			Aliases: []string{"y"},
+			Usage:   "sync RSS feed with bluesky",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "dryrun",
+					Usage: "dryrun the sync",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				dir, err := configDir(c)
+				if err != nil {
+					return err
+				}
+				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+				if err != nil {
+					return err
+				}
+				dao, err := OpenDB(filepath.Join(dir, "skysync.sqlite3"))
+				if err != nil {
+					return err
+				}
+
+				var blueAgent *skybot.BskyAgent
+				ctx := context.Background()
+
+				agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
+				err = agent.Connect(ctx)
+				if err != nil {
+					return err
+				}
+				blueAgent = &agent
+				poster := &BlueskyPoster{
+					skyAgent: blueAgent,
+				}
+				syncer := Syncer{
+					feedParser: gofeed.NewParser(),
+					poster:     poster,
 					dao:        dao,
 					feeds:      cfg.Feeds,
 					tmplDir:    filepath.Join(dir, "templates"),
@@ -252,10 +293,35 @@ func main() {
 					return err
 				}
 
-				mClient := mdon.NewClient(&cfg.Mas)
 				syncer := Syncer{
 					feedParser: gofeed.NewParser(),
-					mClient:    mClient,
+					dao:        dao,
+					feeds:      cfg.Feeds,
+					tmplDir:    filepath.Join(dir, "templates"),
+				}
+				return syncer.Catchup()
+			},
+		},
+		{
+			Name:    "skycatchup",
+			Aliases: []string{},
+			Usage:   "catchup DB with RSS feed",
+			Action: func(c *cli.Context) error {
+				dir, err := configDir(c)
+				if err != nil {
+					return err
+				}
+				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+				if err != nil {
+					return err
+				}
+				dao, err := OpenDB(filepath.Join(dir, "skysync.sqlite3"))
+				if err != nil {
+					return err
+				}
+
+				syncer := Syncer{
+					feedParser: gofeed.NewParser(),
 					dao:        dao,
 					feeds:      cfg.Feeds,
 					tmplDir:    filepath.Join(dir, "templates"),
