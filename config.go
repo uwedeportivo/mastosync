@@ -8,6 +8,7 @@ import (
 type FeedTemplatePair struct {
 	FeedURL  string
 	Template string
+	Tags     []string
 }
 
 type BlueSkyConfig struct {
@@ -18,6 +19,7 @@ type BlueSkyConfig struct {
 type Config struct {
 	Mas          mastodon.Config
 	Feeds        []FeedTemplatePair
+	SkyFeeds     []FeedTemplatePair
 	NotionToken  string
 	NotionParent string
 	Bridge       string
@@ -35,8 +37,12 @@ func InitConfig(path string) error {
 		ClientSecret: "some_client_secret",
 		AccessToken:  "some_access_token",
 	})
-	viper.SetDefault("feeds", []FeedTemplatePair{{"https://someAFeed.com/xml", "someA.tmpl"},
-		{"https://someBFeed.com/xml", "someB.tmpl"}})
+	viper.SetDefault("feeds",
+		[]FeedTemplatePair{{"https://someAFeed.com/xml", "someA.tmpl", []string{"aTag", "bTag"}},
+			{"https://someBFeed.com/xml", "someB.tmpl", []string{"xTag", "yTag"}}})
+	viper.SetDefault("skyfeeds",
+		[]FeedTemplatePair{{"https://someAFeed.com/xml", "someA.tmpl", []string{"aTag", "bTag"}},
+			{"https://someBFeed.com/xml", "someB.tmpl", []string{"xTag", "yTag"}}})
 	viper.SetDefault("notiontoken", "some_notion_token")
 	viper.SetDefault("notionparent", "some_notion_parent_page_id")
 	viper.SetDefault("bridge", "some_bridge")

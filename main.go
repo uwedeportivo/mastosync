@@ -36,6 +36,8 @@ const defaultTmplContent string = `{{.Title}}
 {{.Link}}
 `
 
+const defaultSkyTmplContent string = "{{.Description}}"
+
 func expandTilde(path string) (string, error) {
 	if !strings.HasPrefix(path, "~/") {
 		return path, nil
@@ -112,6 +114,12 @@ func main() {
 					return err
 				}
 				err = os.WriteFile(filepath.Join(dir, "templates", "someA.tmpl"), []byte(defaultTmplContent),
+					0600)
+				err = os.Mkdir(filepath.Join(dir, "skytemplates"), 0700)
+				if err != nil {
+					return err
+				}
+				err = os.WriteFile(filepath.Join(dir, "skytemplates", "someA.tmpl"), []byte(defaultSkyTmplContent),
 					0600)
 				if err != nil {
 					return err
@@ -211,8 +219,8 @@ func main() {
 					feedParser: gofeed.NewParser(),
 					poster:     poster,
 					dao:        dao,
-					feeds:      cfg.Feeds,
-					tmplDir:    filepath.Join(dir, "templates"),
+					feeds:      cfg.SkyFeeds,
+					tmplDir:    filepath.Join(dir, "skytemplates"),
 					dryrun:     c.Bool("dryrun"),
 				}
 				return syncer.Sync()
@@ -297,7 +305,6 @@ func main() {
 					feedParser: gofeed.NewParser(),
 					dao:        dao,
 					feeds:      cfg.Feeds,
-					tmplDir:    filepath.Join(dir, "templates"),
 				}
 				return syncer.Catchup()
 			},
@@ -324,7 +331,6 @@ func main() {
 					feedParser: gofeed.NewParser(),
 					dao:        dao,
 					feeds:      cfg.Feeds,
-					tmplDir:    filepath.Join(dir, "templates"),
 				}
 				return syncer.Catchup()
 			},
