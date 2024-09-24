@@ -516,8 +516,20 @@ func main() {
 				}
 
 				mClient := mdon.NewClient(&cfg.Mas)
+
+				var blueAgent *skybot.BskyAgent
+				ctx := context.Background()
+
+				agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
+				err = agent.Connect(ctx)
+				if err != nil {
+					return err
+				}
+				blueAgent = &agent
+
 				mandala := Mandala{
 					mClient:     mClient,
+					skyAgent:    blueAgent,
 					scriptPath:  cfg.Mandala,
 					mandalaPath: c.String("path"),
 					tootText:    c.String("toot"),

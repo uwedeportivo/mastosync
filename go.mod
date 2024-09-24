@@ -2,6 +2,8 @@ module mastosync
 
 go 1.23
 
+replace github.com/danrusei/gobot-bsky => /Users/uwe/src/gobot-bsky
+
 require (
 	github.com/danrusei/gobot-bsky v0.1.0
 	github.com/jomei/notionapi v1.13.1
