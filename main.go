@@ -142,11 +142,15 @@ func main() {
 		{
 			Name:    "sync",
 			Aliases: []string{"s"},
-			Usage:   "sync RSS feed with mastodon",
+			Usage:   "sync RSS feed with mastodon or bluesky",
 			Flags: []cli.Flag{
 				cli.BoolFlag{
 					Name:  "dryrun",
 					Usage: "dryrun the sync",
+				},
+				cli.BoolFlag{
+					Name:  "sky",
+					Usage: "bluesky",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -158,15 +162,37 @@ func main() {
 				if err != nil {
 					return err
 				}
-				dao, err := OpenDB(filepath.Join(dir, "sync.sqlite3"))
+				dbPath := filepath.Join(dir, "sync.sqlite3")
+				if c.Bool("sky") {
+					dbPath = filepath.Join(dir, "skysync.sqlite3")
+				}
+
+				dao, err := OpenDB(dbPath)
 				if err != nil {
 					return err
 				}
 
-				mClient := mdon.NewClient(&cfg.Mas)
+				var poster Poster
 
-				poster := &MastodonPoster{
-					mClient: mClient,
+				if c.Bool("sky") {
+					var blueAgent *skybot.BskyAgent
+					ctx := context.Background()
+
+					agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
+					err = agent.Connect(ctx)
+					if err != nil {
+						return err
+					}
+					blueAgent = &agent
+					poster = &BlueskyPoster{
+						skyAgent: blueAgent,
+					}
+				} else {
+					mClient := mdon.NewClient(&cfg.Mas)
+
+					poster = &MastodonPoster{
+						mClient: mClient,
+					}
 				}
 				syncer := Syncer{
 					feedParser: gofeed.NewParser(),
@@ -174,53 +200,6 @@ func main() {
 					dao:        dao,
 					feeds:      cfg.Feeds,
 					tmplDir:    filepath.Join(dir, "templates"),
-					dryrun:     c.Bool("dryrun"),
-				}
-				return syncer.Sync()
-			},
-		},
-		{
-			Name:    "skysync",
-			Aliases: []string{"y"},
-			Usage:   "sync RSS feed with bluesky",
-			Flags: []cli.Flag{
-				cli.BoolFlag{
-					Name:  "dryrun",
-					Usage: "dryrun the sync",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				dir, err := configDir(c)
-				if err != nil {
-					return err
-				}
-				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
-				if err != nil {
-					return err
-				}
-				dao, err := OpenDB(filepath.Join(dir, "skysync.sqlite3"))
-				if err != nil {
-					return err
-				}
-
-				var blueAgent *skybot.BskyAgent
-				ctx := context.Background()
-
-				agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
-				err = agent.Connect(ctx)
-				if err != nil {
-					return err
-				}
-				blueAgent = &agent
-				poster := &BlueskyPoster{
-					skyAgent: blueAgent,
-				}
-				syncer := Syncer{
-					feedParser: gofeed.NewParser(),
-					poster:     poster,
-					dao:        dao,
-					feeds:      cfg.SkyFeeds,
-					tmplDir:    filepath.Join(dir, "skytemplates"),
 					dryrun:     c.Bool("dryrun"),
 				}
 				return syncer.Sync()
@@ -287,42 +266,27 @@ func main() {
 			Name:    "catchup",
 			Aliases: []string{"c"},
 			Usage:   "catchup DB with RSS feed",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "sky",
+					Usage: "bluesky",
+				},
+			},
 			Action: func(c *cli.Context) error {
 				dir, err := configDir(c)
 				if err != nil {
 					return err
 				}
 				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
-				if err != nil {
-					return err
-				}
-				dao, err := OpenDB(filepath.Join(dir, "sync.sqlite3"))
 				if err != nil {
 					return err
 				}
 
-				syncer := Syncer{
-					feedParser: gofeed.NewParser(),
-					dao:        dao,
-					feeds:      cfg.Feeds,
+				dbPath := filepath.Join(dir, "sync.sqlite3")
+				if c.Bool("sky") {
+					dbPath = filepath.Join(dir, "skysync.sqlite3")
 				}
-				return syncer.Catchup()
-			},
-		},
-		{
-			Name:    "skycatchup",
-			Aliases: []string{},
-			Usage:   "catchup DB with RSS feed",
-			Action: func(c *cli.Context) error {
-				dir, err := configDir(c)
-				if err != nil {
-					return err
-				}
-				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
-				if err != nil {
-					return err
-				}
-				dao, err := OpenDB(filepath.Join(dir, "skysync.sqlite3"))
+				dao, err := OpenDB(dbPath)
 				if err != nil {
 					return err
 				}
