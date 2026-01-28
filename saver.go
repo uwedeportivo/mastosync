@@ -131,10 +131,28 @@ func ConvertHtml2Blocks(content string) notionapi.Blocks {
 	return blocks
 }
 
+type InternalFileObject struct {
+	Type     string `json:"type"`
+	FileID   string `json:"file_id,omitempty"`
+	URL      string `json:"url,omitempty"`
+}
+
+type InternalImage struct {
+	Type     string              `json:"type"`
+	File     *InternalFileObject `json:"file,omitempty"`
+	External *InternalFileObject `json:"external,omitempty"`
+}
+
+type InternalImageBlock struct {
+	notionapi.BasicBlock
+	Image InternalImage `json:"image"`
+}
+
 type Saver struct {
 	mClient        *mdon.Client
 	dryrun         bool
 	notionClient   *notionapi.Client
+	notionToken    string
 	notionParentID string
 	pageTitle      string
 	debug          bool
@@ -151,6 +169,78 @@ func reverseThread(thread []*mdon.Status) {
 		thread[i], thread[j] = thread[j], thread[i]
 		i, j = i+1, j-1
 	}
+}
+
+func (saver *Saver) UploadToNotion(imageURL string, filename string) (string, error) {
+	resp, err := http.Get(imageURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// 1. Create file upload object
+	uploadReqBody := map[string]string{
+		"name":         filename,
+		"content_type": mime.TypeByExtension(path.Ext(filename)),
+	}
+	reqJSON, _ := json.Marshal(uploadReqBody)
+	req, err := http.NewRequest("POST", "https://api.notion.com/v1/file_uploads", bytes.NewBuffer(reqJSON))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+saver.notionToken)
+	req.Header.Set("Notion-Version", "2022-06-28") // Or whatever version is required for this endpoint
+	req.Header.Set("Content-Type", "application/json")
+
+	notionResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer notionResp.Body.Close()
+
+	if notionResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(notionResp.Body)
+		return "", fmt.Errorf("failed to create file upload: %s", string(body))
+	}
+
+	var uploadData struct {
+		ID        string `json:"id"`
+		UploadURL string `json:"upload_url"`
+	}
+	if err := json.NewDecoder(notionResp.Body).Decode(&uploadData); err != nil {
+		return "", err
+	}
+
+	// 2. Upload file content
+	// Re-fetch body or use a buffer if the file is small. 
+	// For now, let's read the whole thing into a buffer to be safe for Re-requesting if needed, 
+	// but we already have resp.Body. Since we closed it, we need to Re-fetch or use a buffer.
+	// Actually, let's read it into a buffer first.
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	uploadReq, err := http.NewRequest("PUT", uploadData.UploadURL, bytes.NewBuffer(content))
+	if err != nil {
+		return "", err
+	}
+	// Notion's documentation says to use the upload_url directly.
+	// Usually for S3/GCS signed URLs, we don't need many headers.
+	uploadReq.Header.Set("Content-Type", uploadReqBody["content_type"])
+
+	uploadResp, err := http.DefaultClient.Do(uploadReq)
+	if err != nil {
+		return "", err
+	}
+	defer uploadResp.Body.Close()
+
+	if uploadResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(uploadResp.Body)
+		return "", fmt.Errorf("failed to upload file content: %s", string(body))
+	}
+
+	return uploadData.ID, nil
 }
 
 func (saver *Saver) StoreImage(imageURL string, filename string) (*googdrive.File, error) {
@@ -214,6 +304,7 @@ func (saver *Saver) Blocks(thread []*mdon.Status) notionapi.Blocks {
 		blocks = append(blocks, ConvertHtml2Blocks(status.Content)...)
 		for _, ma := range status.MediaAttachments {
 			remoteURL := ma.RemoteURL
+			var fileID string
 			if saver.usegdrive {
 				filename := path.Base(remoteURL)
 				dFile, err := saver.StoreImage(remoteURL, filename)
@@ -235,19 +326,44 @@ func (saver *Saver) Blocks(thread []*mdon.Status) notionapi.Blocks {
 				if saver.debug {
 					log.Println("remote URL", remoteURL)
 				}
+			} else {
+				filename := path.Base(remoteURL)
+				id, err := saver.UploadToNotion(remoteURL, filename)
+				if err == nil {
+					fileID = id
+				} else if saver.debug {
+					log.Println("failed to upload image to Notion: ", err)
+				}
 			}
-			blocks = append(blocks, notionapi.ImageBlock{
-				BasicBlock: notionapi.BasicBlock{
-					Object: notionapi.ObjectTypeBlock,
-					Type:   notionapi.BlockTypeImage,
-				},
-				Image: notionapi.Image{
-					Type: notionapi.FileTypeExternal,
-					External: &notionapi.FileObject{
-						URL: remoteURL,
+
+			if fileID != "" {
+				blocks = append(blocks, InternalImageBlock{
+					BasicBlock: notionapi.BasicBlock{
+						Object: notionapi.ObjectTypeBlock,
+						Type:   notionapi.BlockTypeImage,
 					},
-				},
-			})
+					Image: InternalImage{
+						Type: "file",
+						File: &InternalFileObject{
+							Type:   "file",
+							FileID: fileID,
+						},
+					},
+				})
+			} else {
+				blocks = append(blocks, notionapi.ImageBlock{
+					BasicBlock: notionapi.BasicBlock{
+						Object: notionapi.ObjectTypeBlock,
+						Type:   notionapi.BlockTypeImage,
+					},
+					Image: notionapi.Image{
+						Type: notionapi.FileTypeExternal,
+						External: &notionapi.FileObject{
+							URL: remoteURL,
+						},
+					},
+				})
+			}
 		}
 		blocks = append(blocks, notionapi.DividerBlock{
 			BasicBlock: notionapi.BasicBlock{
@@ -274,6 +390,10 @@ func (saver *Saver) SaveUrl(tootUrl string) error {
 
 func (saver *Saver) Save(id mdon.ID) error {
 	var thread []*mdon.Status
+
+	if saver.notionToken == "" && saver.notionClient != nil {
+		saver.notionToken = string(saver.notionClient.Token)
+	}
 
 	for id != "" {
 		status, err := saver.mClient.GetStatus(context.Background(), id)

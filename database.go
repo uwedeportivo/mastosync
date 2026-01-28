@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"log"
 	"os"
 	"time"
 )
@@ -38,37 +37,23 @@ func (dao *DAO) RecordSync(rssguid, mastid string, ts time.Time) error {
 }
 
 func (dao *DAO) FindToot(rssguid string) (*Toot, error) {
-	rows, err := dao.db.Query(selectTableSQL, rssguid)
+	var toot Toot
+	var ts string
+	err := dao.db.QueryRow(selectTableSQL, rssguid).Scan(&toot.MastID, &ts)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	toot.RSSGUID = rssguid
+	t, err := time.Parse("2006-01-02 15:04:05.999999999-07:00", ts)
 	if err != nil {
 		return nil, err
 	}
-	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			log.Println("Failed to close rows handle")
-		}
-	}(rows)
-
-	var toot Toot
-	var ts string
-	for rows.Next() {
-		err = rows.Scan(&toot.MastID, &ts)
-		if err != nil {
-			return nil, err
-		}
-		toot.RSSGUID = rssguid
-		t, err := time.Parse("2006-01-02 15:04:05.999999999-07:00", ts)
-		if err != nil {
-			return nil, err
-		}
-		toot.Timestamp = t
-		return &toot, nil
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	return nil, nil
+	toot.Timestamp = t
+	return &toot, nil
 }
 
 func CreateDB(path string) error {
