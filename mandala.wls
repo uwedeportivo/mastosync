@@ -3,7 +3,7 @@
 argv = Rest @ $ScriptCommandLine;
 argc = Length @ argv;
 
-mandalaPath = If[argc >=1, argv[[1]], "/tmp/mandala.png"];
+mandalaPath = If[argc >=1, argv[[1]], "/tmp"];
 
 randomColor[] :=
   ColorData[
