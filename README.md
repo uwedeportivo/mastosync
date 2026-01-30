@@ -1,48 +1,125 @@
 # mastosync
 
-> Disclaimer: Please use this small script at your own risk. I wrote it up quickly in one afternoon and make no guarantees to its 
+> Disclaimer: Please use this small script at your own risk. I wrote it up quickly in one afternoon and make no guarantees to its
 > usefulness, correctness etc.
 
 # Introduction
 
-_mastosync_ is a small command-line utility that reads RSS feeds and toots items from those feeds to a specified mastodon instance. 
-Functionality is similar to [mastofeed](https://mastofeed.org/) but as a CLI instead of a comfortable web service. If you are looking
-for a no-hassle way to automatically toot RSS items, then check out **mastofeed**.
+_mastosync_ is a small command-line utility that reads RSS feeds and toots items from those feeds to a specified Mastodon instance or Bluesky.
+Functionality is similar to [mastofeed](https://mastofeed.org/) but as a CLI instead of a comfortable web service.
 
-# Setup
+# Installation
 
-You need to set up a sync directory. You can do that easily by running
+Ensure you have Go installed, then clone the repository and build:
+
+```sh
+go build -o mastosync
+```
+
+# Global Flags
+
+- `--config <path>`: Path to a directory for configuration and databases. Defaults to `.mastosync` in the current directory or `~/.mastosync`.
+
+# Commands
+
+### `init` (alias: `i`)
+Sets up the sync directory with default templates and a skeleton configuration file.
 
 ```sh
 mastosync init
 ```
 
-It will create the ".mastosync" directory. In there you will find the file "config.yaml". You need to specify your mastodon credentials
-and your RSS feeds together with toot templates that go with each feed. The RSS feeds list order is respected and important.
-If you have subfeeds in your blog with specific tags, you can specify them ahead of the general blog feed
-and specify the tags you want in your toots in the templates. That way mastosync will use the
-more specific templates instead of the general template without the tags.
-
-# Catchup
-
-Presumably you already have RSS feeds and don't want _mastosync_ to suddenly toot out all the items in them. To avoid that you
-should let _mastosync_ catchup:
+### `sync` (alias: `s`)
+Syncs RSS feeds with Mastodon or Bluesky.
 
 ```sh
-mastosync catchup
+mastosync sync [flags]
 ```
+**Flags:**
+- `--dryrun`: Perform a dry run without actually posting.
+- `--sky`: Sync to Bluesky instead of Mastodon.
 
-This will record all the existing items in the RSS feeds as already "tooted".
-
-# Sync
-
-After "init" and "catchup", you can run 
+### `catchup` (alias: `c`)
+Records all existing items in the RSS feeds as already processed without posting them. Useful when first setting up.
 
 ```sh
-mastosync sync
+mastosync catchup [flags]
+```
+**Flags:**
+- `--sky`: Catchup for Bluesky feeds.
+
+### `save` (alias: `n`)
+Saves a Mastodon status (and its thread) to a Notion page. Optionally stores media in Google Drive.
+
+```sh
+mastosync save [flags] <status-id-or-url>
+```
+**Flags:**
+- `--dryrun`: Dry run the save operation.
+- `--debug`: Enable debug logging and print the Notion API request.
+- `--external`: Do not use Google Drive to store media; rely on the external Mastodon server URLs.
+- `--title <string>`: Specify a custom title for the Notion page.
+
+### `chain` (alias: `x`)
+Posts a chain of toots from a text file. It automatically splits sentences into individual toots if necessary.
+
+```sh
+mastosync chain [flags] --toots <path-to-file>
+```
+**Flags:**
+- `--toots <path>`: **(Required)** Path to a `.txt` file containing the text to be posted as a chain.
+- `--dryrun`: Dry run the posting.
+
+### `auth` (alias: `a`)
+Refreshes the OAuth token for Google Drive integration. It opens a browser for authentication.
+
+```sh
+mastosync auth
 ```
 
-and if there are new items in any of the specified feeds, they will be tooted. You can "--dryrun" the sync first.
+### `mandala` (alias: `m`)
+Posts a "mandala" (image) to Mastodon and Bluesky.
 
-Use it in a cronjob or similar for hands-free syncing between RSS and Mastodon.
+```sh
+mastosync mandala [flags]
+```
+**Flags:**
+- `--path <path>`: Path to the directory containing mandalas (defaults to `/tmp`).
+- `--toot <text>`: Optional extra text to include with the post.
+
+# Configuration
+
+The configuration is stored in `config.yaml` within your config directory.
+
+### `config.yaml` Fields
+
+| Field | Description |
+|-------|-------------|
+| `mas` | Mastodon client configuration (`server`, `clientid`, `clientsecret`, `accesstoken`). |
+| `feeds` | List of `{feedurl, template}` pairs for Mastodon syncing. |
+| `skyfeeds` | List of `{feedurl, template}` pairs for Bluesky syncing. |
+| `notiontoken` | Your Notion Integration Token. |
+| `notionparent` | The ID of the parent Notion page where saved toots will be created. |
+| `bluesky` | Bluesky credentials (`handle`, `apikey`). |
+| `bridge` | URL prefix for the Google Drive media bridge. |
+| `parent` | Google Drive folder ID for storing media. |
+| `mandala` | Path to the mandala generation script. |
+
+### Templates
+
+Templates are stored in the `templates/` (for Mastodon) and `skytemplates/` (for Bluesky) directories. They use Go's `text/template` syntax.
+
+Available variables in templates:
+- `{{.Title}}`: The title of the RSS item.
+- `{{.Description}}`: The description/content of the RSS item.
+- `{{.Link}}`: The URL of the RSS item.
+
+Example `templates/default.tmpl`:
+```
+{{.Title}}
+
+{{.Description}}
+
+{{.Link}}
+```
 
