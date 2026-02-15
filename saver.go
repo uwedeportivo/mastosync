@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,15 +12,19 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"text/scanner"
+	"time"
 
 	"github.com/jomei/notionapi"
 	mdon "github.com/mattn/go-mastodon"
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
 	googdrive "google.golang.org/api/drive/v3"
+	"gopkg.in/yaml.v3"
 )
 
 var stripTagsPolicy = bluemonday.StripTagsPolicy()
@@ -132,9 +138,9 @@ func ConvertHtml2Blocks(content string) notionapi.Blocks {
 }
 
 type InternalFileObject struct {
-	Type     string `json:"type"`
-	FileID   string `json:"file_id,omitempty"`
-	URL      string `json:"url,omitempty"`
+	Type   string `json:"type"`
+	FileID string `json:"file_id,omitempty"`
+	URL    string `json:"url,omitempty"`
 }
 
 type InternalImage struct {
@@ -160,6 +166,7 @@ type Saver struct {
 	usegdrive      bool
 	bridge         string
 	parent         string
+	outputPath     string
 }
 
 func reverseThread(thread []*mdon.Status) {
@@ -212,8 +219,8 @@ func (saver *Saver) UploadToNotion(imageURL string, filename string) (string, er
 	}
 
 	// 2. Upload file content
-	// Re-fetch body or use a buffer if the file is small. 
-	// For now, let's read the whole thing into a buffer to be safe for Re-requesting if needed, 
+	// Re-fetch body or use a buffer if the file is small.
+	// For now, let's read the whole thing into a buffer to be safe for Re-requesting if needed,
 	// but we already have resp.Body. Since we closed it, we need to Re-fetch or use a buffer.
 	// Actually, let's read it into a buffer first.
 	content, err := io.ReadAll(resp.Body)
@@ -376,6 +383,141 @@ func (saver *Saver) Blocks(thread []*mdon.Status) notionapi.Blocks {
 	return blocks
 }
 
+func (saver *Saver) SaveToDirectory(thread []*mdon.Status) error {
+	if saver.outputPath == "" {
+		return fmt.Errorf("output path not set")
+	}
+
+	if err := os.MkdirAll(saver.outputPath, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	imagesDir := filepath.Join(saver.outputPath, "images")
+	if err := os.MkdirAll(imagesDir, 0755); err != nil {
+		return fmt.Errorf("failed to create images directory: %w", err)
+	}
+
+	if len(saver.pageTitle) == 0 {
+		saver.pageTitle = ExtractTitle(thread[0])
+	}
+
+	// Sanitize filename
+	filename := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, saver.pageTitle) + ".md"
+
+	mdPath := filepath.Join(saver.outputPath, filename)
+
+	var buf bytes.Buffer
+
+	// Frontmatter
+	type Frontmatter struct {
+		Title  string    `yaml:"title"`
+		Date   time.Time `yaml:"date"`
+		Author string    `yaml:"author"`
+		URL    string    `yaml:"url"`
+		ID     string    `yaml:"id"`
+		Tags   []string  `yaml:"tags"`
+	}
+
+	tags := []string{"mastodon"}
+	for _, tag := range thread[0].Tags {
+		tags = append(tags, tag.Name)
+	}
+
+	fm := Frontmatter{
+		Title:  saver.pageTitle,
+		Date:   thread[0].CreatedAt,
+		Author: fmt.Sprintf("%s (@%s)", thread[0].Account.DisplayName, thread[0].Account.Acct),
+		URL:    thread[0].URL,
+		ID:     string(thread[0].ID),
+		Tags:   tags,
+	}
+
+	buf.WriteString("---\n")
+	fmBytes, err := yaml.Marshal(fm)
+	if err != nil {
+		return fmt.Errorf("failed to marshal frontmatter: %w", err)
+	}
+	buf.Write(fmBytes)
+	buf.WriteString("---\n\n")
+
+	// Content
+	for _, status := range thread {
+		// Simple HTML to Markdown conversion for content
+		content := status.Content
+		// Strip some tags or convert them
+		// This is a simplified version, ideally use a proper html-to-markdown lib
+		content = strings.ReplaceAll(content, "<p>", "")
+		content = strings.ReplaceAll(content, "</p>", "\n\n")
+		content = strings.ReplaceAll(content, "<br />", "\n")
+		content = strings.ReplaceAll(content, "<br/>", "\n")
+
+		// Remove other tags for a cleaner look
+		content = stripTagsPolicy.Sanitize(content)
+
+		buf.WriteString(content)
+		buf.WriteString("\n")
+
+		for _, ma := range status.MediaAttachments {
+			hashedName, err := saver.downloadAndHash(ma.URL, imagesDir)
+			if err != nil {
+				log.Printf("failed to download attachment %s: %v", ma.URL, err)
+				continue
+			}
+
+			// Obsidian link to images subfolder
+			buf.WriteString(fmt.Sprintf("![[images/%s]]\n", hashedName))
+		}
+		buf.WriteString("\n---\n\n")
+	}
+
+	return os.WriteFile(mdPath, buf.Bytes(), 0644)
+}
+
+func (saver *Saver) downloadAndHash(url string, destDir string) (string, error) {
+	if saver.dryrun {
+		log.Printf("[dryrun] would download and hash %s to %s", url, destDir)
+		return "dryrun_hash.png", nil
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to download file: %s", resp.Status)
+	}
+
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	hash := sha256.Sum256(content)
+	hashStr := hex.EncodeToString(hash[:])
+
+	ext := filepath.Ext(url)
+	if ext == "" {
+		// Try to get extension from Content-Type
+		ct := resp.Header.Get("Content-Type")
+		exts, _ := mime.ExtensionsByType(ct)
+		if len(exts) > 0 {
+			ext = exts[0]
+		}
+	}
+
+	filename := hashStr + ext
+	destPath := filepath.Join(destDir, filename)
+
+	err = os.WriteFile(destPath, content, 0644)
+	return filename, err
+}
+
 func (saver *Saver) SaveUrl(tootUrl string) error {
 	srs, err := saver.mClient.Search(context.Background(), tootUrl, true)
 	if err != nil {
@@ -417,6 +559,10 @@ func (saver *Saver) Save(id mdon.ID) error {
 
 	if len(saver.pageTitle) == 0 {
 		saver.pageTitle = ExtractTitle(thread[0])
+	}
+
+	if saver.outputPath != "" {
+		return saver.SaveToDirectory(thread)
 	}
 
 	blocks := saver.Blocks(thread)

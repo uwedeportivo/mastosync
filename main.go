@@ -320,6 +320,10 @@ func main() {
 					Name:  "title",
 					Usage: "title of the saved page",
 				},
+				cli.StringFlag{
+					Name:  "dir",
+					Usage: "directory to save as markdown",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				if !c.Args().Present() {
@@ -380,6 +384,7 @@ func main() {
 					usegdrive:      !c.Bool("external"),
 					bridge:         cfg.Bridge,
 					parent:         cfg.Parent,
+					outputPath:     c.String("dir"),
 				}
 				return saver.SaveToot(c.Args().First())
 			},
