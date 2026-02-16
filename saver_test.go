@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/jomei/notionapi"
-	mdon "github.com/mattn/go-mastodon"
 )
 
 func TestExtractTitle(t *testing.T) {
@@ -36,12 +35,10 @@ func TestExtractTitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status := &mdon.Status{
+			status := &SavedStatus{
 				Content: tt.content,
-				Account: mdon.Account{
-					Username: tt.username,
-				},
 			}
+			status.Account.Username = tt.username
 			result := ExtractTitle(status)
 			if result != tt.expected {
 				t.Errorf("ExtractTitle() = %q, want %q", result, tt.expected)

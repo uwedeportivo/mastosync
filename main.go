@@ -339,7 +339,25 @@ func main() {
 				}
 
 				notionClient := notionapi.NewClient(notionapi.Token(cfg.NotionToken), notionapi.WithRetry(2))
-				mClient := mdon.NewClient(&cfg.Mas)
+
+				var fetcher Fetcher
+				input := c.Args().First()
+
+				if strings.Contains(input, "bsky.app") || strings.HasPrefix(input, "at://") {
+					var blueAgent *skybot.BskyAgent
+					ctx := context.Background()
+
+					agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
+					err = agent.Connect(ctx)
+					if err != nil {
+						return err
+					}
+					blueAgent = &agent
+					fetcher = &BlueskyFetcher{skyAgent: blueAgent}
+				} else {
+					mClient := mdon.NewClient(&cfg.Mas)
+					fetcher = &MastodonFetcher{mClient: mClient}
+				}
 
 				b, err := os.ReadFile(filepath.Join(dir, "gdrive.json"))
 				if err != nil {
@@ -374,7 +392,6 @@ func main() {
 				}
 
 				saver := Saver{
-					mClient:        mClient,
 					dryrun:         c.Bool("dryrun"),
 					notionClient:   notionClient,
 					notionParentID: cfg.NotionParent,
@@ -385,8 +402,9 @@ func main() {
 					bridge:         cfg.Bridge,
 					parent:         cfg.Parent,
 					outputPath:     c.String("dir"),
+					fetcher:        fetcher,
 				}
-				return saver.SaveToot(c.Args().First())
+				return saver.SaveToot(input)
 			},
 		},
 		{

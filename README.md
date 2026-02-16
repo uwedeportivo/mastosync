@@ -49,7 +49,7 @@ mastosync catchup [flags]
 - `--sky`: Catchup for Bluesky feeds.
 
 ### `save` (alias: `n`)
-Saves a Mastodon status (and its thread) to a Notion page or a local directory as a Markdown file.
+Saves a Mastodon status or Bluesky skeet (and its thread) to a Notion page or a local directory as a Markdown file.
 
 ```sh
 mastosync save [flags] <status-id-or-url>
@@ -64,10 +64,11 @@ mastosync save [flags] <status-id-or-url>
 **Local Markdown Export:**
 When the `--dir` flag is provided, _mastosync_ will:
 1. Create a Markdown file in the specified directory with Obsidian-compatible YAML frontmatter.
-2. Include status-specific metadata (date, author, URL) and automatically add a `mastodon` tag along with any hashtags from the post.
+2. Include platform-specific metadata (date, author, URL) and automatically add a `mastodon` or `bluesky` tag along with any hashtags from the post.
 3. Download all media attachments into an `images/` subfolder.
-4. Rename image files to their SHA-256 hash to ensure uniqueness and avoid duplicates.
-5. Use Obsidian-style `![[images/hash.png]]` links within the Markdown file.
+4. Convert images in uncommon formats (like `.jfif`) to standard `.jpg`.
+5. Rename image files to their SHA-256 hash to ensure uniqueness and avoid duplicates.
+6. Use Obsidian-style `![[images/hash.png]]` links within the Markdown file.
 
 ### `chain` (alias: `x`)
 Posts a chain of toots from a text file. It automatically splits sentences into individual toots if necessary.

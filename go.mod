@@ -5,6 +5,7 @@ go 1.25
 replace github.com/danrusei/gobot-bsky => /Users/uwe/src/gobot-bsky
 
 require (
+	github.com/bluesky-social/indigo v0.0.0-20260127211757-33d2b3214722
 	github.com/danrusei/gobot-bsky v0.2.2
 	github.com/jomei/notionapi v1.13.3
 	github.com/mattn/go-mastodon v0.0.10
@@ -28,7 +29,6 @@ require (
 	github.com/PuerkitoBio/goquery v1.11.0 // indirect
 	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/bluesky-social/indigo v0.0.0-20260127211757-33d2b3214722 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/earthboundkid/versioninfo/v2 v2.24.1 // indirect

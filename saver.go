@@ -7,6 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"log"
 	"mime"
@@ -25,11 +28,37 @@ import (
 	"golang.org/x/net/html"
 	googdrive "google.golang.org/api/drive/v3"
 	"gopkg.in/yaml.v3"
+
+	"github.com/bluesky-social/indigo/api/atproto"
+	appbsky "github.com/bluesky-social/indigo/api/bsky"
+	skybot "github.com/danrusei/gobot-bsky"
 )
 
 var stripTagsPolicy = bluemonday.StripTagsPolicy()
 
-func ExtractTitle(status *mdon.Status) string {
+type SavedMedia struct {
+	ID        string
+	URL       string
+	RemoteURL string
+}
+
+type SavedStatus struct {
+	ID        string
+	Content   string
+	URL       string
+	CreatedAt time.Time
+	Account   struct {
+		Username    string
+		DisplayName string
+		Acct        string
+	}
+	Tags []struct {
+		Name string
+	}
+	MediaAttachments []SavedMedia
+}
+
+func ExtractTitle(status *SavedStatus) string {
 	strippedContent := stripTagsPolicy.Sanitize(status.Content)
 	var s scanner.Scanner
 	s.Init(strings.NewReader(strippedContent))
@@ -154,8 +183,152 @@ type InternalImageBlock struct {
 	Image InternalImage `json:"image"`
 }
 
+type Fetcher interface {
+	Fetch(ctx context.Context, idOrUrl string) ([]*SavedStatus, error)
+}
+
+type MastodonFetcher struct {
+	mClient *mdon.Client
+}
+
+func (mf *MastodonFetcher) Fetch(ctx context.Context, idOrUrl string) ([]*SavedStatus, error) {
+	id := idOrUrl
+	if strings.HasPrefix(idOrUrl, "https://") {
+		srs, err := mf.mClient.Search(ctx, idOrUrl, true)
+		if err != nil {
+			return nil, err
+		}
+		if len(srs.Statuses) == 0 {
+			return nil, fmt.Errorf("toot not found")
+		}
+		id = string(srs.Statuses[0].ID)
+	}
+
+	var thread []*mdon.Status
+	for id != "" {
+		status, err := mf.mClient.GetStatus(ctx, mdon.ID(id))
+		if err != nil {
+			return nil, err
+		}
+		thread = append(thread, status)
+		if status.InReplyToID != nil {
+			id = status.InReplyToID.(string)
+		} else {
+			id = ""
+		}
+	}
+
+	// Reverse thread
+	for i, j := 0, len(thread)-1; i < j; i, j = i+1, j-1 {
+		thread[i], thread[j] = thread[j], thread[i]
+	}
+
+	var result []*SavedStatus
+	for _, s := range thread {
+		ss := &SavedStatus{
+			ID:        string(s.ID),
+			Content:   s.Content,
+			URL:       s.URL,
+			CreatedAt: s.CreatedAt,
+		}
+		ss.Account.Username = s.Account.Username
+		ss.Account.DisplayName = s.Account.DisplayName
+		ss.Account.Acct = s.Account.Acct
+		for _, t := range s.Tags {
+			ss.Tags = append(ss.Tags, struct{ Name string }{Name: t.Name})
+		}
+		for _, ma := range s.MediaAttachments {
+			ss.MediaAttachments = append(ss.MediaAttachments, SavedMedia{
+				ID:        string(ma.ID),
+				URL:       ma.URL,
+				RemoteURL: ma.RemoteURL,
+			})
+		}
+		result = append(result, ss)
+	}
+	return result, nil
+}
+
+type BlueskyFetcher struct {
+	skyAgent *skybot.BskyAgent
+}
+
+func (bf *BlueskyFetcher) Fetch(ctx context.Context, idOrUrl string) ([]*SavedStatus, error) {
+	uri := idOrUrl
+	if strings.HasPrefix(idOrUrl, "https://") {
+		// Example: https://bsky.app/profile/danrusei.bsky.social/post/3j7z7z7z7z7z7
+		u, err := url.Parse(idOrUrl)
+		if err != nil {
+			return nil, err
+		}
+		parts := strings.Split(u.Path, "/")
+		if len(parts) < 5 {
+			return nil, fmt.Errorf("invalid bluesky url")
+		}
+		handle := parts[2]
+		postID := parts[4]
+
+		resolve, err := atproto.IdentityResolveHandle(ctx, bf.skyAgent.Client(), handle)
+		if err != nil {
+			return nil, err
+		}
+		uri = fmt.Sprintf("at://%s/app.bsky.feed.post/%s", resolve.Did, postID)
+	}
+
+	threadOutput, err := appbsky.FeedGetPostThread(ctx, bf.skyAgent.Client(), 0, 10, uri)
+	if err != nil {
+		return nil, err
+	}
+
+	var thread []*appbsky.FeedDefs_ThreadViewPost
+	curr := threadOutput.Thread.FeedDefs_ThreadViewPost
+	for curr != nil {
+		thread = append(thread, curr)
+		if curr.Parent != nil && curr.Parent.FeedDefs_ThreadViewPost != nil {
+			curr = curr.Parent.FeedDefs_ThreadViewPost
+		} else {
+			curr = nil
+		}
+	}
+
+	// Reverse thread to original order
+	for i, j := 0, len(thread)-1; i < j; i, j = i+1, j-1 {
+		thread[i], thread[j] = thread[j], thread[i]
+	}
+
+	var result []*SavedStatus
+	for _, p := range thread {
+		post := p.Post
+		ss := &SavedStatus{
+			ID:      post.Cid,
+			Content: post.Record.Val.(*appbsky.FeedPost).Text,
+			URL:     fmt.Sprintf("https://bsky.app/profile/%s/post/%s", post.Author.Handle, filepath.Base(post.Uri)),
+		}
+		if t, err := time.Parse(time.RFC3339, post.Record.Val.(*appbsky.FeedPost).CreatedAt); err == nil {
+			ss.CreatedAt = t
+		}
+		ss.Account.Username = post.Author.Handle
+		if post.Author.DisplayName != nil {
+			ss.Account.DisplayName = *post.Author.DisplayName
+		}
+		ss.Account.Acct = post.Author.Handle
+
+		if post.Embed != nil && post.Embed.EmbedImages_View != nil {
+			for i, img := range post.Embed.EmbedImages_View.Images {
+				ss.MediaAttachments = append(ss.MediaAttachments, SavedMedia{
+					ID:        fmt.Sprintf("%s-%d", post.Cid, i),
+					URL:       img.Fullsize,
+					RemoteURL: img.Fullsize,
+				})
+			}
+		}
+		result = append(result, ss)
+	}
+
+	return result, nil
+}
+
 type Saver struct {
-	mClient        *mdon.Client
 	dryrun         bool
 	notionClient   *notionapi.Client
 	notionToken    string
@@ -167,15 +340,7 @@ type Saver struct {
 	bridge         string
 	parent         string
 	outputPath     string
-}
-
-func reverseThread(thread []*mdon.Status) {
-	i, j := 0, len(thread)-1
-
-	for i < j {
-		thread[i], thread[j] = thread[j], thread[i]
-		i, j = i+1, j-1
-	}
+	fetcher        Fetcher
 }
 
 func (saver *Saver) UploadToNotion(imageURL string, filename string) (string, error) {
@@ -285,7 +450,7 @@ func (saver *Saver) StoreImage(imageURL string, filename string) (*googdrive.Fil
 	return dFile, nil
 }
 
-func (saver *Saver) Blocks(thread []*mdon.Status) notionapi.Blocks {
+func (saver *Saver) Blocks(thread []*SavedStatus) notionapi.Blocks {
 	var blocks notionapi.Blocks
 	blocks = append(blocks, notionapi.Heading3Block{
 		BasicBlock: notionapi.BasicBlock{
@@ -383,7 +548,7 @@ func (saver *Saver) Blocks(thread []*mdon.Status) notionapi.Blocks {
 	return blocks
 }
 
-func (saver *Saver) SaveToDirectory(thread []*mdon.Status) error {
+func (saver *Saver) SaveToDirectory(thread []*SavedStatus) error {
 	if saver.outputPath == "" {
 		return fmt.Errorf("output path not set")
 	}
@@ -423,7 +588,13 @@ func (saver *Saver) SaveToDirectory(thread []*mdon.Status) error {
 		Tags   []string  `yaml:"tags"`
 	}
 
-	tags := []string{"mastodon"}
+	tags := []string{}
+	if strings.Contains(thread[0].URL, "bsky.app") {
+		tags = append(tags, "bluesky")
+	} else {
+		tags = append(tags, "mastodon")
+	}
+
 	for _, tag := range thread[0].Tags {
 		tags = append(tags, tag.Name)
 	}
@@ -501,13 +672,31 @@ func (saver *Saver) downloadAndHash(url string, destDir string) (string, error) 
 	hash := sha256.Sum256(content)
 	hashStr := hex.EncodeToString(hash[:])
 
-	ext := filepath.Ext(url)
+	ext := strings.ToLower(filepath.Ext(url))
 	if ext == "" {
 		// Try to get extension from Content-Type
 		ct := resp.Header.Get("Content-Type")
 		exts, _ := mime.ExtensionsByType(ct)
 		if len(exts) > 0 {
 			ext = exts[0]
+		}
+	}
+
+	if ext == ".jfif" || resp.Header.Get("Content-Type") == "image/jfif" {
+		img, _, err := image.Decode(bytes.NewReader(content))
+		if err == nil {
+			var buf bytes.Buffer
+			if err := jpeg.Encode(&buf, img, nil); err == nil {
+				content = buf.Bytes()
+				ext = ".jpg"
+				// Re-calculate hash for the new content
+				hash = sha256.Sum256(content)
+				hashStr = hex.EncodeToString(hash[:])
+			} else {
+				log.Printf("failed to encode jfif as jpg: %v", err)
+			}
+		} else {
+			log.Printf("failed to decode jfif image: %v", err)
 		}
 	}
 
@@ -518,42 +707,18 @@ func (saver *Saver) downloadAndHash(url string, destDir string) (string, error) 
 	return filename, err
 }
 
-func (saver *Saver) SaveUrl(tootUrl string) error {
-	srs, err := saver.mClient.Search(context.Background(), tootUrl, true)
-	if err != nil {
-		return err
-	}
-	if len(srs.Statuses) > 0 {
-		return saver.Save(srs.Statuses[0].ID)
-	}
-	fmt.Println("toot not found")
-	return nil
-}
-
-func (saver *Saver) Save(id mdon.ID) error {
-	var thread []*mdon.Status
-
+func (saver *Saver) Save(idOrUrl string) error {
 	if saver.notionToken == "" && saver.notionClient != nil {
 		saver.notionToken = string(saver.notionClient.Token)
 	}
 
-	for id != "" {
-		status, err := saver.mClient.GetStatus(context.Background(), id)
-		if err != nil {
-			return err
-		}
-		thread = append(thread, status)
-		if status.InReplyToID != nil {
-			prevId := status.InReplyToID.(string)
-			id = mdon.ID(prevId)
-		} else {
-			id = ""
-		}
+	thread, err := saver.fetcher.Fetch(context.Background(), idOrUrl)
+	if err != nil {
+		return err
 	}
-	reverseThread(thread)
 
 	if len(thread) == 0 {
-		fmt.Println("toot not found")
+		fmt.Println("nothing found to save")
 		return nil
 	}
 
@@ -618,8 +783,5 @@ func (saver *Saver) Save(id mdon.ID) error {
 }
 
 func (saver *Saver) SaveToot(toot string) error {
-	if strings.HasPrefix(toot, "https://") {
-		return saver.SaveUrl(toot)
-	}
-	return saver.Save(mdon.ID(toot))
+	return saver.Save(toot)
 }
