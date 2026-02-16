@@ -97,6 +97,35 @@ mastosync mandala [flags]
 - `--path <path>`: Path to the directory containing mandalas (defaults to `/tmp`).
 - `--toot <text>`: Optional extra text to include with the post.
 
+### `mcp`
+Runs _mastosync_ as a Model Context Protocol (MCP) server over `stdio`. This allows MCP-compatible applications (like Gemini CLI) to interact with _mastosync_'s commands as tools.
+
+```sh
+mastosync mcp
+```
+
+# Using as an MCP Server
+
+You can configure _mastosync_ as an MCP server in your tools. For example, in Gemini CLI, add it to your configuration:
+
+```json
+{
+  "mcpServers": {
+    "mastosync": {
+      "command": "/path/to/mastosync",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+The server exposes the following tools:
+- `sync`: Sync RSS feed with Mastodon or Bluesky.
+- `save`: Save a status to Notion or Markdown.
+- `catchup`: Catchup DB with RSS feed.
+- `mandala`: Post a mandala.
+- `chain`: Post a chain of toots.
+
 # Configuration
 
 The configuration is stored in `config.yaml` within your config directory.

@@ -25,8 +25,11 @@ import (
 	"github.com/urfave/cli"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
-	googdrive "google.golang.org/api/drive/v3"
+	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
+
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 const defaultTmplContent string = `{{.Title}}
@@ -105,38 +108,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				err = os.Mkdir(dir, 0700)
-				if err != nil {
-					return err
-				}
-				err = os.Mkdir(filepath.Join(dir, "templates"), 0700)
-				if err != nil {
-					return err
-				}
-				err = os.WriteFile(filepath.Join(dir, "templates", "someA.tmpl"), []byte(defaultTmplContent),
-					0600)
-				err = os.Mkdir(filepath.Join(dir, "skytemplates"), 0700)
-				if err != nil {
-					return err
-				}
-				err = os.WriteFile(filepath.Join(dir, "skytemplates", "someA.tmpl"), []byte(defaultSkyTmplContent),
-					0600)
-				if err != nil {
-					return err
-				}
-				err = InitConfig(filepath.Join(dir, "config.yaml"))
-				if err != nil {
-					return err
-				}
-				err = CreateDB(filepath.Join(dir, "sync.sqlite3"))
-				if err != nil {
-					return err
-				}
-				err = CreateDB(filepath.Join(dir, "skysync.sqlite3"))
-				if err != nil {
-					return err
-				}
-				return nil
+				return ActionInit(dir)
 			},
 		},
 		{
@@ -158,51 +130,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
-				if err != nil {
-					return err
-				}
-				dbPath := filepath.Join(dir, "sync.sqlite3")
-				if c.Bool("sky") {
-					dbPath = filepath.Join(dir, "skysync.sqlite3")
-				}
-
-				dao, err := OpenDB(dbPath)
-				if err != nil {
-					return err
-				}
-
-				var poster Poster
-
-				if c.Bool("sky") {
-					var blueAgent *skybot.BskyAgent
-					ctx := context.Background()
-
-					agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
-					err = agent.Connect(ctx)
-					if err != nil {
-						return err
-					}
-					blueAgent = &agent
-					poster = &BlueskyPoster{
-						skyAgent: blueAgent,
-					}
-				} else {
-					mClient := mdon.NewClient(&cfg.Mas)
-
-					poster = &MastodonPoster{
-						mClient: mClient,
-					}
-				}
-				syncer := Syncer{
-					feedParser: gofeed.NewParser(),
-					poster:     poster,
-					dao:        dao,
-					feeds:      cfg.Feeds,
-					tmplDir:    filepath.Join(dir, "templates"),
-					dryrun:     c.Bool("dryrun"),
-				}
-				return syncer.Sync()
+				return ActionSync(dir, c.Bool("sky"), c.Bool("dryrun"))
 			},
 		},
 		{
@@ -224,42 +152,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
-				if err != nil {
-					return err
-				}
-
-				mClient := mdon.NewClient(&cfg.Mas)
-
-				b, err := td.Asset("data/english.json")
-				if err != nil {
-					return err
-				}
-
-				training, err := sentences.LoadTraining(b)
-				if err != nil {
-					return err
-				}
-
-				tokenizer := sentences.NewSentenceTokenizer(training)
-
-				tootsPath := c.String("toots")
-
-				if !filepath.IsAbs(tootsPath) {
-					absTootsPath, err := filepath.Abs(tootsPath)
-					if err != nil {
-						return err
-					}
-					tootsPath = absTootsPath
-				}
-
-				tooter := Tooter{
-					mClient:   mClient,
-					tootsPath: tootsPath,
-					dryrun:    c.Bool("dryrun"),
-					tokenizer: tokenizer,
-				}
-				return tooter.Toot()
+				return ActionChain(dir, c.String("toots"), c.Bool("dryrun"))
 			},
 		},
 		{
@@ -277,26 +170,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
-				if err != nil {
-					return err
-				}
-
-				dbPath := filepath.Join(dir, "sync.sqlite3")
-				if c.Bool("sky") {
-					dbPath = filepath.Join(dir, "skysync.sqlite3")
-				}
-				dao, err := OpenDB(dbPath)
-				if err != nil {
-					return err
-				}
-
-				syncer := Syncer{
-					feedParser: gofeed.NewParser(),
-					dao:        dao,
-					feeds:      cfg.Feeds,
-				}
-				return syncer.Catchup()
+				return ActionCatchup(dir, c.Bool("sky"))
 			},
 		},
 		{
@@ -333,78 +207,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
-				if err != nil {
-					return err
-				}
-
-				notionClient := notionapi.NewClient(notionapi.Token(cfg.NotionToken), notionapi.WithRetry(2))
-
-				var fetcher Fetcher
-				input := c.Args().First()
-
-				if strings.Contains(input, "bsky.app") || strings.HasPrefix(input, "at://") {
-					var blueAgent *skybot.BskyAgent
-					ctx := context.Background()
-
-					agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
-					err = agent.Connect(ctx)
-					if err != nil {
-						return err
-					}
-					blueAgent = &agent
-					fetcher = &BlueskyFetcher{skyAgent: blueAgent}
-				} else {
-					mClient := mdon.NewClient(&cfg.Mas)
-					fetcher = &MastodonFetcher{mClient: mClient}
-				}
-
-				b, err := os.ReadFile(filepath.Join(dir, "gdrive.json"))
-				if err != nil {
-					return err
-				}
-
-				// If modifying these scopes, delete your previously saved token.json.
-				gdriveConfig, err := google.ConfigFromJSON(b, googdrive.DriveFileScope)
-				if err != nil {
-					return err
-				}
-
-				tokenFile, err := os.Open(filepath.Join(dir, "gdrive.token"))
-				if err != nil {
-					return err
-				}
-				gdriveToken := &oauth2.Token{}
-				err = json.NewDecoder(tokenFile).Decode(gdriveToken)
-				if err != nil {
-					return err
-				}
-				err = tokenFile.Close()
-				if err != nil {
-					return err
-				}
-				gdriveClient := gdriveConfig.Client(context.Background(), gdriveToken)
-
-				gdriveService, err := googdrive.NewService(context.Background(),
-					option.WithHTTPClient(gdriveClient))
-				if err != nil {
-					return err
-				}
-
-				saver := Saver{
-					dryrun:         c.Bool("dryrun"),
-					notionClient:   notionClient,
-					notionParentID: cfg.NotionParent,
-					pageTitle:      c.String("title"),
-					gdriveService:  gdriveService,
-					debug:          c.Bool("debug"),
-					usegdrive:      !c.Bool("external"),
-					bridge:         cfg.Bridge,
-					parent:         cfg.Parent,
-					outputPath:     c.String("dir"),
-					fetcher:        fetcher,
-				}
-				return saver.SaveToot(input)
+				return ActionSave(dir, c.Args().First(), c.String("title"), c.String("dir"), c.Bool("dryrun"), c.Bool("debug"), c.Bool("external"))
 			},
 		},
 		{
@@ -416,64 +219,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				b, err := os.ReadFile(filepath.Join(dir, "gdrive.json"))
-				if err != nil {
-					return err
-				}
-
-				// If modifying these scopes, delete your previously saved token.json.
-				gdriveConfig, err := google.ConfigFromJSON(b, googdrive.DriveFileScope)
-				if err != nil {
-					return err
-				}
-
-				tr := &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-				}
-				sslcli := &http.Client{Transport: tr}
-				ctx := context.Background()
-				ctx = context.WithValue(ctx, oauth2.HTTPClient, sslcli)
-
-				server := &http.Server{Addr: ":9999"}
-
-				// create a channel to receive the authorization code
-				codeChan := make(chan string)
-
-				http.HandleFunc("/oauth/callback", handleOauthCallback(codeChan))
-
-				go func() {
-					if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-						log.Fatalf("Failed to start server: %v", err)
-					}
-				}()
-
-				// get the OAuth authorization URL
-				authUrl := gdriveConfig.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-
-				// Redirect user to consent page to ask for permission
-				// for the scopes specified above
-				fmt.Printf("Your browser has been opened to visit::\n%s\n", authUrl)
-
-				// open user's browser to login page
-				if err := browser.OpenURL(authUrl); err != nil {
-					panic(fmt.Errorf("failed to open browser for authentication %v", err))
-				}
-
-				authCode := <-codeChan
-				tok, err := gdriveConfig.Exchange(context.Background(), authCode)
-				if err != nil {
-					return err
-				}
-				f, err := os.OpenFile(filepath.Join(dir, "gdrive.token"),
-					os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
-				if err != nil {
-					return err
-				}
-				err = json.NewEncoder(f).Encode(tok)
-				if err != nil {
-					return err
-				}
-				return f.Close()
+				return ActionAuth(dir)
 			},
 		},
 		{
@@ -497,31 +243,18 @@ func main() {
 				if err != nil {
 					return err
 				}
-				cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+				return ActionMandala(dir, c.String("path"), c.String("toot"))
+			},
+		},
+		{
+			Name:  "mcp",
+			Usage: "run as an MCP server",
+			Action: func(c *cli.Context) error {
+				dir, err := configDir(c)
 				if err != nil {
 					return err
 				}
-
-				mClient := mdon.NewClient(&cfg.Mas)
-
-				var blueAgent *skybot.BskyAgent
-				ctx := context.Background()
-
-				agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
-				err = agent.Connect(ctx)
-				if err != nil {
-					return err
-				}
-				blueAgent = &agent
-
-				mandala := Mandala{
-					mClient:     mClient,
-					skyAgent:    blueAgent,
-					scriptPath:  cfg.Mandala,
-					mandalaPath: c.String("path"),
-					tootText:    c.String("toot"),
-				}
-				return mandala.Post()
+				return RunMCPServer(dir)
 			},
 		},
 	}
@@ -529,4 +262,400 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func ActionInit(dir string) error {
+	err := os.Mkdir(dir, 0700)
+	if err != nil {
+		return err
+	}
+	err = os.Mkdir(filepath.Join(dir, "templates"), 0700)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(filepath.Join(dir, "templates", "someA.tmpl"), []byte(defaultTmplContent),
+		0600)
+	err = os.Mkdir(filepath.Join(dir, "skytemplates"), 0700)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(filepath.Join(dir, "skytemplates", "someA.tmpl"), []byte(defaultSkyTmplContent),
+		0600)
+	if err != nil {
+		return err
+	}
+	err = InitConfig(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		return err
+	}
+	err = CreateDB(filepath.Join(dir, "sync.sqlite3"))
+	if err != nil {
+		return err
+	}
+	err = CreateDB(filepath.Join(dir, "skysync.sqlite3"))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ActionSync(dir string, sky bool, dryrun bool) error {
+	cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		return err
+	}
+	dbPath := filepath.Join(dir, "sync.sqlite3")
+	if sky {
+		dbPath = filepath.Join(dir, "skysync.sqlite3")
+	}
+
+	dao, err := OpenDB(dbPath)
+	if err != nil {
+		return err
+	}
+
+	var poster Poster
+
+	if sky {
+		var blueAgent *skybot.BskyAgent
+		ctx := context.Background()
+
+		agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
+		err = agent.Connect(ctx)
+		if err != nil {
+			return err
+		}
+		blueAgent = &agent
+		poster = &BlueskyPoster{
+			skyAgent: blueAgent,
+		}
+	} else {
+		mClient := mdon.NewClient(&cfg.Mas)
+
+		poster = &MastodonPoster{
+			mClient: mClient,
+		}
+	}
+	syncer := Syncer{
+		feedParser: gofeed.NewParser(),
+		poster:     poster,
+		dao:        dao,
+		feeds:      cfg.Feeds,
+		tmplDir:    filepath.Join(dir, "templates"),
+		dryrun:     dryrun,
+	}
+	return syncer.Sync()
+}
+
+func ActionChain(dir string, tootsPath string, dryrun bool) error {
+	cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		return err
+	}
+
+	mClient := mdon.NewClient(&cfg.Mas)
+
+	b, err := td.Asset("data/english.json")
+	if err != nil {
+		return err
+	}
+
+	training, err := sentences.LoadTraining(b)
+	if err != nil {
+		return err
+	}
+
+	tokenizer := sentences.NewSentenceTokenizer(training)
+
+	if !filepath.IsAbs(tootsPath) {
+		absTootsPath, err := filepath.Abs(tootsPath)
+		if err != nil {
+			return err
+		}
+		tootsPath = absTootsPath
+	}
+
+	tooter := Tooter{
+		mClient:   mClient,
+		tootsPath: tootsPath,
+		dryrun:    dryrun,
+		tokenizer: tokenizer,
+	}
+	return tooter.Toot()
+}
+
+func ActionCatchup(dir string, sky bool) error {
+	cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		return err
+	}
+
+	dbPath := filepath.Join(dir, "sync.sqlite3")
+	if sky {
+		dbPath = filepath.Join(dir, "skysync.sqlite3")
+	}
+	dao, err := OpenDB(dbPath)
+	if err != nil {
+		return err
+	}
+
+	syncer := Syncer{
+		feedParser: gofeed.NewParser(),
+		dao:        dao,
+		feeds:      cfg.Feeds,
+	}
+	return syncer.Catchup()
+}
+
+func ActionSave(dir string, input string, title string, outputPath string, dryrun bool, debug bool, external bool) error {
+	cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		return err
+	}
+
+	notionClient := notionapi.NewClient(notionapi.Token(cfg.NotionToken), notionapi.WithRetry(2))
+
+	var fetcher Fetcher
+
+	if strings.Contains(input, "bsky.app") || strings.HasPrefix(input, "at://") {
+		var blueAgent *skybot.BskyAgent
+		ctx := context.Background()
+
+		agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
+		err = agent.Connect(ctx)
+		if err != nil {
+			return err
+		}
+		blueAgent = &agent
+		fetcher = &BlueskyFetcher{skyAgent: blueAgent}
+	} else {
+		mClient := mdon.NewClient(&cfg.Mas)
+		fetcher = &MastodonFetcher{mClient: mClient}
+	}
+
+	b, err := os.ReadFile(filepath.Join(dir, "gdrive.json"))
+	if err != nil {
+		return err
+	}
+
+	gdriveConfig, err := google.ConfigFromJSON(b, drive.DriveFileScope)
+	if err != nil {
+		return err
+	}
+
+	tokenFile, err := os.Open(filepath.Join(dir, "gdrive.token"))
+	if err != nil {
+		return err
+	}
+	gdriveToken := &oauth2.Token{}
+	err = json.NewDecoder(tokenFile).Decode(gdriveToken)
+	if err != nil {
+		return err
+	}
+	err = tokenFile.Close()
+	if err != nil {
+		return err
+	}
+	gdriveClient := gdriveConfig.Client(context.Background(), gdriveToken)
+
+	gdriveService, err := drive.NewService(context.Background(),
+		option.WithHTTPClient(gdriveClient))
+	if err != nil {
+		return err
+	}
+
+	saver := Saver{
+		dryrun:         dryrun,
+		notionClient:   notionClient,
+		notionParentID: cfg.NotionParent,
+		pageTitle:      title,
+		gdriveService:  gdriveService,
+		debug:          debug,
+		usegdrive:      !external,
+		bridge:         cfg.Bridge,
+		parent:         cfg.Parent,
+		outputPath:     outputPath,
+		fetcher:        fetcher,
+	}
+	return saver.SaveToot(input)
+}
+
+func ActionAuth(dir string) error {
+	b, err := os.ReadFile(filepath.Join(dir, "gdrive.json"))
+	if err != nil {
+		return err
+	}
+
+	gdriveConfig, err := google.ConfigFromJSON(b, drive.DriveFileScope)
+	if err != nil {
+		return err
+	}
+
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	sslcli := &http.Client{Transport: tr}
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, sslcli)
+
+	server := &http.Server{Addr: ":9999"}
+
+	// create a channel to receive the authorization code
+	codeChan := make(chan string)
+
+	http.HandleFunc("/oauth/callback", handleOauthCallback(codeChan))
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Failed to start server: %v", err)
+		}
+	}()
+
+	// get the OAuth authorization URL
+	authUrl := gdriveConfig.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
+
+	// Redirect user to consent page to ask for permission
+	// for the scopes specified above
+	fmt.Printf("Your browser has been opened to visit::\n%s\n", authUrl)
+
+	// open user's browser to login page
+	if err := browser.OpenURL(authUrl); err != nil {
+		return fmt.Errorf("failed to open browser for authentication %v", err)
+	}
+
+	authCode := <-codeChan
+	tok, err := gdriveConfig.Exchange(context.Background(), authCode)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(filepath.Join(dir, "gdrive.token"),
+		os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	err = json.NewEncoder(f).Encode(tok)
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+func ActionMandala(dir string, path string, toot string) error {
+	cfg, err := ReadConfig(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		return err
+	}
+
+	mClient := mdon.NewClient(&cfg.Mas)
+
+	var blueAgent *skybot.BskyAgent
+	ctx := context.Background()
+
+	agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
+	err = agent.Connect(ctx)
+	if err != nil {
+		return err
+	}
+	blueAgent = &agent
+
+	mandala := Mandala{
+		mClient:     mClient,
+		skyAgent:    blueAgent,
+		scriptPath:  cfg.Mandala,
+		mandalaPath: path,
+		tootText:    toot,
+	}
+	return mandala.Post()
+}
+
+func RunMCPServer(dir string) error {
+	s := server.NewMCPServer(
+		"mastosync",
+		"1.0.0",
+	)
+
+	s.AddTool(mcp.NewTool("sync",
+		mcp.WithDescription("Sync RSS feed with Mastodon or Bluesky"),
+		mcp.WithBoolean("sky", mcp.Description("bluesky")),
+		mcp.WithBoolean("dryrun", mcp.Description("dryrun the sync")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		sky := request.GetBool("sky", false)
+		dryrun := request.GetBool("dryrun", false)
+		err := ActionSync(dir, sky, dryrun)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText("Sync completed successfully"), nil
+	})
+
+	s.AddTool(mcp.NewTool("save",
+		mcp.WithDescription("Save a status to Notion"),
+		mcp.WithString("id", mcp.Description("toot id or url to save"), mcp.Required()),
+		mcp.WithString("title", mcp.Description("title of the saved page")),
+		mcp.WithString("dir", mcp.Description("directory to save as markdown")),
+		mcp.WithBoolean("dryrun", mcp.Description("dryrun the save")),
+		mcp.WithBoolean("debug", mcp.Description("debug the save")),
+		mcp.WithBoolean("external", mcp.Description("do not use gdrive to store media")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, err := request.RequireString("id")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		title := request.GetString("title", "")
+		saveDir := request.GetString("dir", "")
+		dryrun := request.GetBool("dryrun", false)
+		debug := request.GetBool("debug", false)
+		external := request.GetBool("external", false)
+
+		err = ActionSave(dir, id, title, saveDir, dryrun, debug, external)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText("Save completed successfully"), nil
+	})
+
+	s.AddTool(mcp.NewTool("catchup",
+		mcp.WithDescription("Catchup DB with RSS feed"),
+		mcp.WithBoolean("sky", mcp.Description("bluesky")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		sky := request.GetBool("sky", false)
+		err := ActionCatchup(dir, sky)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText("Catchup completed successfully"), nil
+	})
+
+	s.AddTool(mcp.NewTool("mandala",
+		mcp.WithDescription("Post a mandala"),
+		mcp.WithString("path", mcp.Description("path to directory with mandalas")),
+		mcp.WithString("toot", mcp.Description("toot extra text")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		path := request.GetString("path", "/tmp")
+		toot := request.GetString("toot", "")
+		err := ActionMandala(dir, path, toot)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText("Mandala posted successfully"), nil
+	})
+
+	s.AddTool(mcp.NewTool("chain",
+		mcp.WithDescription("Post a chain of toots"),
+		mcp.WithString("toots", mcp.Description("path to a txt file containing the toot chain"), mcp.Required()),
+		mcp.WithBoolean("dryrun", mcp.Description("dryrun the posting")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		toots, err := request.RequireString("toots")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		dryrun := request.GetBool("dryrun", false)
+		err = ActionChain(dir, toots, dryrun)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText("Chain posted successfully"), nil
+	})
+
+	return server.ServeStdio(s)
 }
