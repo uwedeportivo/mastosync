@@ -65,7 +65,7 @@ func TestMastodonPoster_Post_Truncation(t *testing.T) {
 		if len(status) > kMastodonMaxTootLen {
 			t.Errorf("Status was not truncated: length %d", len(status))
 		}
-		
+
 		resp := mdon.Status{ID: "id"}
 		json.NewEncoder(w).Encode(resp)
 	})
@@ -77,12 +77,12 @@ func TestMastodonPoster_Post_Truncation(t *testing.T) {
 	})
 	poster := &MastodonPoster{mClient: client}
 
-	longTitle := ""
-	for i := 0; i < 600; i++ {
-		longTitle += "a"
+	var longTitle strings.Builder
+	for range 600 {
+		longTitle.WriteString("a")
 	}
 	tmpl, _ := template.New("test").Parse("{{.Title}}")
-	item := &gofeed.Item{Title: longTitle}
+	item := &gofeed.Item{Title: longTitle.String()}
 
 	_, err := poster.Post(item, tmpl)
 	if err != nil {
@@ -95,7 +95,7 @@ func TestBlueskyPoster_Post(t *testing.T) {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.Contains(r.URL.Path, "com.atproto.server.createSession") {
-			resp := map[string]interface{}{
+			resp := map[string]any{
 				"accessJwt":  "test-access-jwt",
 				"refreshJwt": "test-refresh-jwt",
 				"handle":     "test-handle",
@@ -105,7 +105,7 @@ func TestBlueskyPoster_Post(t *testing.T) {
 			return
 		}
 		if strings.Contains(r.URL.Path, "com.atproto.repo.createRecord") {
-			resp := map[string]interface{}{
+			resp := map[string]any{
 				"cid": "test-cid",
 				"uri": "at://did:plc:test-did/app.bsky.feed.post/test-post-id",
 			}
@@ -113,7 +113,7 @@ func TestBlueskyPoster_Post(t *testing.T) {
 			return
 		}
 		// Default mock response for other XRPC or similar
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"cid": "test-cid",
 			"uri": "test-uri",
 		}

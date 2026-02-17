@@ -68,10 +68,7 @@ func ExtractTitle(status *SavedStatus) string {
 		words = append(words, s.TokenText())
 		tok = s.Scan()
 	}
-	numWords := 5
-	if len(words) < 5 {
-		numWords = len(words)
-	}
+	numWords := min(len(words), 5)
 	return status.Account.Username + ": " + strings.Join(words[:numWords], " ")
 }
 
