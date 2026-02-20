@@ -1,164 +1,114 @@
-# mastosync
+![mastosync Hero](mastosync_hero.png)
 
-> Disclaimer: Please use this small script at your own risk. I wrote it up quickly in one afternoon and make no guarantees to its
-> usefulness, correctness etc.
+# 🐘🦋 mastosync
 
-# Introduction
+**mastosync** is a sleek, powerful Go-based command-line utility designed to bridge your RSS feeds with the decentralized social web. Whether you're broadcasting to **Mastodon** or **Bluesky**, *mastosync* makes automated cross-posting effortless, reliable, and highly customizable.
 
-_mastosync_ is a small command-line utility that reads RSS feeds and toots items from those feeds to a specified Mastodon instance or Bluesky.
-Functionality is similar to [mastofeed](https://mastofeed.org/) but as a CLI instead of a comfortable web service.
+> [!CAUTION]
+> **Use at your own risk.** This tool was crafted with speed and specific needs in mind. While it works reliably for many, always verify your configuration before running it in production environments.
 
-# Installation
+---
 
-Ensure you have Go installed, then clone the repository and build:
+## ✨ Features
 
-```sh
+- **🔄 Multi-Platform Syncing**: Seamlessly post from RSS feeds to both Mastodon and Bluesky.
+- **📥 Smart Saving**: Capture Mastodon toots or Bluesky skeets (including full threads) directly into **Notion** or local **Obsidian-ready Markdown**.
+- **🖼️ Media Handling**:
+    - Automatic image downloading and SHA-256 deduplication.
+    - Intelligent format conversion (e.g., `.jfif` → `.jpg`).
+    - integration with **Google Drive** for high-quality media bridging.
+- **🎨 Mandala Integration**: Built-in support for posting generated mandalas.
+- **⛓️ Thread Support**: Automatically split long text files into a coherent chain of posts.
+- **🤖 MCP Server Mode**: Full support for the **Model Context Protocol**, allowing AI agents (like Gemini or Claude) to use *mastosync* as a specialized toolset.
+- **🛠️ Template Engine**: Fully customizable post formatting using Go's `text/template` syntax.
+
+---
+
+## 🚀 Usage
+
+### ⚙️ Installation
+
+#### Build from Source
+```bash
 go build -o mastosync
 ```
 
-# Global Flags
+---
 
-- `--config <path>`: Path to a directory for configuration and databases. Defaults to `.mastosync` in the current directory or `~/.mastosync`.
-
-# Commands
+## 📋 Commands
 
 ### `init` (alias: `i`)
-Sets up the sync directory with default templates and a skeleton configuration file.
-
-```sh
+Initialize your workspace with default templates and a configuration skeleton.
+```bash
 mastosync init
 ```
 
 ### `sync` (alias: `s`)
-Syncs RSS feeds with Mastodon or Bluesky.
-
-```sh
-mastosync sync [flags]
+Synchronize your RSS feeds with your social profiles.
+```bash
+mastosync sync [--dryrun] [--sky]
 ```
-**Flags:**
-- `--dryrun`: Perform a dry run without actually posting.
-- `--sky`: Sync to Bluesky instead of Mastodon.
-
-### `catchup` (alias: `c`)
-Records all existing items in the RSS feeds as already processed without posting them. Useful when first setting up.
-
-```sh
-mastosync catchup [flags]
-```
-**Flags:**
-- `--sky`: Catchup for Bluesky feeds.
 
 ### `save` (alias: `n`)
-Saves a Mastodon status or Bluesky skeet (and its thread) to a Notion page or a local directory as a Markdown file.
-
-```sh
-mastosync save [flags] <status-id-or-url>
+Archive a post or thread to Notion or Obsidian.
+```bash
+mastosync save [--dir <path>] [--title <string>] <status-id-or-url>
 ```
-**Flags:**
-- `--dryrun`: Dry run the save operation.
-- `--debug`: Enable debug logging and print the Notion API request.
-- `--external`: (Notion only) Do not use Google Drive to store media; rely on the external Mastodon server URLs.
-- `--title <string>`: Specify a custom title for the Notion page or the Markdown file.
-- `--dir <path>`: Save the status to a local directory as an Obsidian-compatible Markdown file.
-
-**Local Markdown Export:**
-When the `--dir` flag is provided, _mastosync_ will:
-1. Create a Markdown file in the specified directory with Obsidian-compatible YAML frontmatter.
-2. Include platform-specific metadata (date, author, URL) and automatically add a `mastodon` or `bluesky` tag along with any hashtags from the post.
-3. Download all media attachments into an `images/` subfolder.
-4. Convert images in uncommon formats (like `.jfif`) to standard `.jpg`.
-5. Rename image files to their SHA-256 hash to ensure uniqueness and avoid duplicates.
-6. Use Obsidian-style `![[images/hash.png]]` links within the Markdown file.
 
 ### `chain` (alias: `x`)
-Posts a chain of toots from a text file. It automatically splits sentences into individual toots if necessary.
-
-```sh
-mastosync chain [flags] --toots <path-to-file>
+Post a sequence of updates from a text file.
+```bash
+mastosync chain --toots <path-to-file> [--dryrun]
 ```
-**Flags:**
-- `--toots <path>`: **(Required)** Path to a `.txt` file containing the text to be posted as a chain.
-- `--dryrun`: Dry run the posting.
-
-### `auth` (alias: `a`)
-Refreshes the OAuth token for Google Drive integration. It opens a browser for authentication.
-
-```sh
-mastosync auth
-```
-
-### `mandala` (alias: `m`)
-Posts a "mandala" (image) to Mastodon and Bluesky.
-
-```sh
-mastosync mandala [flags]
-```
-**Flags:**
-- `--path <path>`: Path to the directory containing mandalas (defaults to `/tmp`).
-- `--toot <text>`: Optional extra text to include with the post.
 
 ### `mcp`
-Runs _mastosync_ as a Model Context Protocol (MCP) server over `stdio`. This allows MCP-compatible applications (like Gemini CLI) to interact with _mastosync_'s commands as tools.
-
-```sh
+Launch *mastosync* as an MCP server.
+```bash
 mastosync mcp
 ```
 
-# Using as an MCP Server
+---
 
-You can configure _mastosync_ as an MCP server in your tools. For example, in Gemini CLI, add it to your configuration:
+## 🛠️ Configuration & Global Flags
 
-```json
-{
-  "mcpServers": {
-    "mastosync": {
-      "command": "/path/to/mastosync",
-      "args": ["mcp"]
-    }
-  }
-}
-```
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--config` | Path to configuration directory | `~/.mastosync` |
 
-The server exposes the following tools:
-- `sync`: Sync RSS feed with Mastodon or Bluesky.
-- `save`: Save a status to Notion or Markdown.
-- `catchup`: Catchup DB with RSS feed.
-- `mandala`: Post a mandala.
-- `chain`: Post a chain of toots.
-
-# Configuration
-
-The configuration is stored in `config.yaml` within your config directory.
-
-### `config.yaml` Fields
+### `config.yaml` Structure
 
 | Field | Description |
 |-------|-------------|
-| `mas` | Mastodon client configuration (`server`, `clientid`, `clientsecret`, `accesstoken`). |
-| `feeds` | List of `{feedurl, template}` pairs for Mastodon syncing. |
-| `skyfeeds` | List of `{feedurl, template}` pairs for Bluesky syncing. |
-| `notiontoken` | Your Notion Integration Token. |
-| `notionparent` | The ID of the parent Notion page where saved toots will be created. |
-| `bluesky` | Bluesky credentials (`handle`, `apikey`). |
-| `bridge` | URL prefix for the Google Drive media bridge. |
-| `parent` | Google Drive folder ID for storing media. |
-| `mandala` | Path to the mandala generation script. |
+| `mas` | Mastodon API credentials (`server`, `clientid`, etc.) |
+| `skyfeeds` | Configuration for Bluesky RSS synchronization |
+| `bluesky` | Bluesky account credentials (`handle`, `apikey`) |
+| `notiontoken` | Your Notion integration secret |
+| `parent` | Google Drive folder ID for media storage |
 
-### Templates
+---
 
-Templates are stored in the `templates/` (for Mastodon) and `skytemplates/` (for Bluesky) directories. They use Go's `text/template` syntax.
+## 🏗️ How it Works
 
-Available variables in templates:
-- `{{.Title}}`: The title of the RSS item.
-- `{{.Description}}`: The description/content of the RSS item.
-- `{{.Link}}`: The URL of the RSS item.
+1.  **RSS Ingestion**: Periodically polls configured feeds for new entries.
+2.  **State Management**: Uses a local database to ensure items are never posted twice.
+3.  **Template Rendering**: Merges RSS data (`Title`, `Description`, `Link`) with your custom `.tmpl` files.
+4.  **Media Processing**: Downloads, hashes, and prepares attachments for the target platform.
+5.  **API Dispatch**: Communicates via OAuth to Mastodon or via AT Protocol to Bluesky.
 
-Example `templates/default.tmpl`:
-```
-{{.Title}}
+---
 
-{{.Description}}
+## 🔮 Future Proposals
 
-{{.Link}}
-```
+We're constantly thinking about how to make *mastosync* better. Here are some ideas on the horizon:
+
+- **🧠 AI Summaries**: Use LLMs to condense long articles into snappy social media updates.
+- **🌉 Cross-Platform Bridging**: Automatically sync replies and likes across platforms.
+- **📅 Visual Scheduler**: A dashboard-like view to schedule posts and manage feeds.
+- **🔍 Deep Search**: Full-text search across your archived social media interactions.
+
+---
+
+## 📄 License
+
+Distributed under the [MIT](LICENSE) License.
 
