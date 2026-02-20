@@ -1,6 +1,6 @@
 module mastosync
 
-go 1.25
+go 1.26
 
 replace github.com/danrusei/gobot-bsky => /Users/uwe/src/gobot-bsky
 
