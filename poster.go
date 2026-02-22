@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"html"
 	"net/url"
 	"text/template"
 
@@ -33,7 +34,7 @@ func (mpr *MastodonPoster) Post(item *gofeed.Item, tmpl *template.Template) (str
 		tootStr = tootStr[:kMastodonMaxTootLen]
 	}
 	toot := mdon.Toot{
-		Status: tootStr,
+		Status: html.UnescapeString(tootStr),
 	}
 
 	status, err := mpr.mClient.PostStatus(context.Background(), &toot)
@@ -62,8 +63,8 @@ func (bpr *BlueskyPoster) Post(item *gofeed.Item, tmpl *template.Template) (stri
 	if len(tootStr) > kBlueskyMaxTootLen {
 		tootStr = tootStr[:kBlueskyMaxTootLen]
 	}
-	post, err := skybot.NewPostBuilder(tootStr).
-		WithExternalLink(item.Title, *u, item.Title).
+	post, err := skybot.NewPostBuilder(html.UnescapeString(tootStr)).
+		WithExternalLink(html.UnescapeString(item.Title), *u, html.UnescapeString(item.Title)).
 		Build()
 	if err != nil {
 		return "", err
