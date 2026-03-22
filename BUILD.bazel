@@ -1,0 +1,71 @@
+load("@gazelle//:def.bzl", "gazelle")
+load("@rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+# gazelle:prefix github.com/uwedeportivo/mastosync
+gazelle(name = "gazelle")
+
+go_library(
+    name = "mastosync_lib",
+    srcs = [
+        "config.go",
+        "database.go",
+        "main.go",
+        "mandala.go",
+        "poster.go",
+        "saver.go",
+        "syncer.go",
+        "tooter.go",
+    ],
+    importpath = "github.com/uwedeportivo/mastosync",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_bluesky_social_indigo//api/atproto",
+        "@com_github_bluesky_social_indigo//api/bsky",
+        "@com_github_bluesky_social_indigo//lex/util",
+        "@com_github_bluesky_social_indigo//xrpc",
+        "@com_github_danrusei_gobot_bsky//:gobot-bsky",
+        "@com_github_jomei_notionapi//:notionapi",
+        "@com_github_mark3labs_mcp_go//mcp",
+        "@com_github_mark3labs_mcp_go//server",
+        "@com_github_mattn_go_mastodon//:go-mastodon",
+        "@com_github_mattn_go_sqlite3//:go-sqlite3",
+        "@com_github_microcosm_cc_bluemonday//:bluemonday",
+        "@com_github_mmcdole_gofeed//:gofeed",
+        "@com_github_neurosnap_sentences//:sentences",
+        "@com_github_neurosnap_sentences//data",
+        "@com_github_pkg_browser//:browser",
+        "@com_github_spf13_viper//:viper",
+        "@com_github_urfave_cli//:cli",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+        "@org_golang_google_api//drive/v3:drive",
+        "@org_golang_google_api//option",
+        "@org_golang_x_net//html",
+        "@org_golang_x_oauth2//:oauth2",
+        "@org_golang_x_oauth2//google",
+    ],
+)
+
+go_binary(
+    name = "mastosync",
+    embed = [":mastosync_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "mastosync_test",
+    srcs = [
+        "database_test.go",
+        "poster_test.go",
+        "saver_test.go",
+        "syncer_test.go",
+        "tooter_test.go",
+    ],
+    embed = [":mastosync_lib"],
+    deps = [
+        "@com_github_danrusei_gobot_bsky//:gobot-bsky",
+        "@com_github_jomei_notionapi//:notionapi",
+        "@com_github_mattn_go_mastodon//:go-mastodon",
+        "@com_github_mattn_go_sqlite3//:go-sqlite3",
+        "@com_github_mmcdole_gofeed//:gofeed",
+    ],
+)

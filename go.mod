@@ -1,8 +1,6 @@
-module mastosync
+module github.com/uwedeportivo/mastosync
 
-go 1.26
-
-replace github.com/danrusei/gobot-bsky => /Users/uwe/src/gobot-bsky
+go 1.26.1
 
 require (
 	github.com/bluesky-social/indigo v0.0.0-20260127211757-33d2b3214722

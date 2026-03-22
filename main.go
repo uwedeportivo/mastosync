@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/xrpc"
 	skybot "github.com/danrusei/gobot-bsky"
 	"github.com/jomei/notionapi"
 	mdon "github.com/mattn/go-mastodon"
@@ -418,16 +420,22 @@ func ActionSave(dir string, input string, title string, outputPath string, dryru
 	var fetcher Fetcher
 
 	if strings.Contains(input, "bsky.app") || strings.HasPrefix(input, "at://") {
-		var blueAgent *skybot.BskyAgent
 		ctx := context.Background()
-
-		agent := skybot.NewAgent(ctx, "https://bsky.social", cfg.BlueSky.Handle, cfg.BlueSky.APIKey)
-		err = agent.Connect(ctx)
+		skyClient := &xrpc.Client{Client: new(http.Client), Host: "https://bsky.social"}
+		session, err := atproto.ServerCreateSession(ctx, skyClient, &atproto.ServerCreateSession_Input{
+			Identifier: cfg.BlueSky.Handle,
+			Password:   cfg.BlueSky.APIKey,
+		})
 		if err != nil {
 			return err
 		}
-		blueAgent = &agent
-		fetcher = &BlueskyFetcher{skyAgent: blueAgent}
+		skyClient.Auth = &xrpc.AuthInfo{
+			AccessJwt:  session.AccessJwt,
+			RefreshJwt: session.RefreshJwt,
+			Handle:     session.Handle,
+			Did:        session.Did,
+		}
+		fetcher = &BlueskyFetcher{skyClient: skyClient}
 	} else {
 		mClient := mdon.NewClient(&cfg.Mas)
 		fetcher = &MastodonFetcher{mClient: mClient}

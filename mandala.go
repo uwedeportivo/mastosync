@@ -64,18 +64,14 @@ func (mandala *Mandala) PostMastodon() error {
 }
 
 func (mandala *Mandala) PostBlueSky() error {
-	var images []skybot.Image
-
 	uu, err := url.Parse("file://" + filepath.Join(mandala.mandalaPath, "mandala.png"))
 	if err != nil {
 		return err
 	}
-	images = append(images, skybot.Image{
-		Title: "Mandala",
-		Uri:   *uu,
-	})
+	images := []skybot.Image{{Title: "Mandala", Uri: *uu}}
 
-	blobs, err := mandala.skyAgent.UploadImages(context.Background(), images...)
+	ctx := context.Background()
+	blobs, err := mandala.skyAgent.UploadImages(ctx, images...)
 	if err != nil {
 		return err
 	}
@@ -87,11 +83,8 @@ func (mandala *Mandala) PostBlueSky() error {
 		return err
 	}
 
-	_, _, err = mandala.skyAgent.PostToFeed(context.Background(), post)
-	if err != nil {
-		return err
-	}
-	return nil
+	_, _, err = mandala.skyAgent.PostToFeed(ctx, post)
+	return err
 }
 
 func (mandala *Mandala) Post() error {

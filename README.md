@@ -28,6 +28,11 @@
 
 ### ⚙️ Installation
 
+#### Using go install
+```bash
+go install github.com/uwedeportivo/mastosync@latest
+```
+
 #### Build from Source
 ```bash
 go build -o mastosync

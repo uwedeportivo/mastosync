@@ -31,7 +31,7 @@ import (
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	appbsky "github.com/bluesky-social/indigo/api/bsky"
-	skybot "github.com/danrusei/gobot-bsky"
+	"github.com/bluesky-social/indigo/xrpc"
 )
 
 var stripTagsPolicy = bluemonday.StripTagsPolicy()
@@ -247,7 +247,7 @@ func (mf *MastodonFetcher) Fetch(ctx context.Context, idOrUrl string) ([]*SavedS
 }
 
 type BlueskyFetcher struct {
-	skyAgent *skybot.BskyAgent
+	skyClient *xrpc.Client
 }
 
 func (bf *BlueskyFetcher) Fetch(ctx context.Context, idOrUrl string) ([]*SavedStatus, error) {
@@ -265,14 +265,14 @@ func (bf *BlueskyFetcher) Fetch(ctx context.Context, idOrUrl string) ([]*SavedSt
 		handle := parts[2]
 		postID := parts[4]
 
-		resolve, err := atproto.IdentityResolveHandle(ctx, bf.skyAgent.Client(), handle)
+		resolve, err := atproto.IdentityResolveHandle(ctx, bf.skyClient, handle)
 		if err != nil {
 			return nil, err
 		}
 		uri = fmt.Sprintf("at://%s/app.bsky.feed.post/%s", resolve.Did, postID)
 	}
 
-	threadOutput, err := appbsky.FeedGetPostThread(ctx, bf.skyAgent.Client(), 0, 10, uri)
+	threadOutput, err := appbsky.FeedGetPostThread(ctx, bf.skyClient, 0, 10, uri)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,7 @@
+bazel-*
+*.lock
+.antigravity
+.gemini
+mastosync
+.claude
+.vscode

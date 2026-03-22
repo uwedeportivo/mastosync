@@ -8,6 +8,7 @@ import (
 	"text/template"
 
 	skybot "github.com/danrusei/gobot-bsky"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
 	mdon "github.com/mattn/go-mastodon"
 	"github.com/mmcdole/gofeed"
 )
@@ -64,7 +65,7 @@ func (bpr *BlueskyPoster) Post(item *gofeed.Item, tmpl *template.Template) (stri
 		tootStr = tootStr[:kBlueskyMaxTootLen]
 	}
 	post, err := skybot.NewPostBuilder(html.UnescapeString(tootStr)).
-		WithExternalLink(html.UnescapeString(item.Title), *u, html.UnescapeString(item.Title)).
+		WithExternalLink(html.UnescapeString(item.Title), *u, html.UnescapeString(item.Title), lexutil.LexBlob{}).
 		Build()
 	if err != nil {
 		return "", err
