@@ -241,6 +241,19 @@ mastosync mandala --path ~/mandalas --toot "#GenerativeArt"
 
 Requires the `mandala` script path to be set in `config.yaml` (passed to `wolframscript -file`).
 
+**Example output:**
+
+<table>
+  <tr>
+    <td><img src="mandala1.png" width="240" alt="Mandala 1"/></td>
+    <td><img src="mandala2.png" width="240" alt="Mandala 2"/></td>
+  </tr>
+  <tr>
+    <td><img src="mandala3.png" width="240" alt="Mandala 3"/></td>
+    <td><img src="mandala4.png" width="240" alt="Mandala 4"/></td>
+  </tr>
+</table>
+
 ---
 
 <a id="mcp"></a>
