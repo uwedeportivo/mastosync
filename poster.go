@@ -6,9 +6,10 @@ import (
 	"html"
 	"net/url"
 	"text/template"
+	"time"
 
+	appbsky "github.com/bluesky-social/indigo/api/bsky"
 	skybot "github.com/danrusei/gobot-bsky"
-	lexutil "github.com/bluesky-social/indigo/lex/util"
 	mdon "github.com/mattn/go-mastodon"
 	"github.com/mmcdole/gofeed"
 )
@@ -64,11 +65,21 @@ func (bpr *BlueskyPoster) Post(item *gofeed.Item, tmpl *template.Template) (stri
 	if len(tootStr) > kBlueskyMaxTootLen {
 		tootStr = tootStr[:kBlueskyMaxTootLen]
 	}
-	post, err := skybot.NewPostBuilder(html.UnescapeString(tootStr)).
-		WithExternalLink(html.UnescapeString(item.Title), *u, html.UnescapeString(item.Title), lexutil.LexBlob{}).
-		Build()
-	if err != nil {
-		return "", err
+
+	post := appbsky.FeedPost{
+		LexiconTypeID: "app.bsky.feed.post",
+		Text:          html.UnescapeString(tootStr),
+		CreatedAt:     time.Now().Format(time.RFC3339),
+		Embed: &appbsky.FeedPost_Embed{
+			EmbedExternal: &appbsky.EmbedExternal{
+				LexiconTypeID: "app.bsky.embed.external",
+				External: &appbsky.EmbedExternal_External{
+					Title:       html.UnescapeString(item.Title),
+					Uri:         u.String(),
+					Description: html.UnescapeString(item.Title),
+				},
+			},
+		},
 	}
 
 	ctx := context.Background()
