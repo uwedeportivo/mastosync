@@ -26,6 +26,7 @@ type MastodonPoster struct {
 }
 
 func (mpr *MastodonPoster) Post(item *gofeed.Item, tmpl *template.Template) (string, error) {
+	item.Description = stripTagsPolicy.Sanitize(item.Description)
 	buf := new(bytes.Buffer)
 	err := tmpl.Execute(buf, item)
 	if err != nil {
@@ -56,6 +57,7 @@ func (bpr *BlueskyPoster) Post(item *gofeed.Item, tmpl *template.Template) (stri
 	if err != nil {
 		return "", err
 	}
+	item.Description = stripTagsPolicy.Sanitize(item.Description)
 	buf := new(bytes.Buffer)
 	err = tmpl.Execute(buf, item)
 	if err != nil {
