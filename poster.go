@@ -99,10 +99,15 @@ func (bpr *BlueskyPoster) Post(item *gofeed.Item, tmpl *template.Template) (stri
 		}
 	}
 
+	createdAt := time.Now().Format(time.RFC3339)
+	if item.PublishedParsed != nil {
+		createdAt = item.PublishedParsed.Format(time.RFC3339)
+	}
+
 	post := appbsky.FeedPost{
 		LexiconTypeID: "app.bsky.feed.post",
 		Text:          html.UnescapeString(tootStr),
-		CreatedAt:     time.Now().Format(time.RFC3339),
+		CreatedAt:     createdAt,
 		Embed: &appbsky.FeedPost_Embed{
 			EmbedExternal: &appbsky.EmbedExternal{
 				LexiconTypeID: "app.bsky.embed.external",

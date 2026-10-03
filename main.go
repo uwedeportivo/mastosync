@@ -338,12 +338,24 @@ func ActionSync(dir string, sky bool, dryrun bool) error {
 			mClient: mClient,
 		}
 	}
+	feeds := cfg.Feeds
+	tmplDir := filepath.Join(dir, "templates")
+	if sky {
+		if len(cfg.SkyFeeds) > 0 {
+			feeds = cfg.SkyFeeds
+		}
+		skyTmplDir := filepath.Join(dir, "skytemplates")
+		if _, err := os.Stat(skyTmplDir); err == nil {
+			tmplDir = skyTmplDir
+		}
+	}
+
 	syncer := Syncer{
 		feedParser: gofeed.NewParser(),
 		poster:     poster,
 		dao:        dao,
-		feeds:      cfg.Feeds,
-		tmplDir:    filepath.Join(dir, "templates"),
+		feeds:      feeds,
+		tmplDir:    tmplDir,
 		dryrun:     dryrun,
 	}
 	return syncer.Sync()
@@ -401,10 +413,15 @@ func ActionCatchup(dir string, sky bool) error {
 		return err
 	}
 
+	feeds := cfg.Feeds
+	if sky && len(cfg.SkyFeeds) > 0 {
+		feeds = cfg.SkyFeeds
+	}
+
 	syncer := Syncer{
 		feedParser: gofeed.NewParser(),
 		dao:        dao,
-		feeds:      cfg.Feeds,
+		feeds:      feeds,
 	}
 	return syncer.Catchup()
 }

@@ -58,11 +58,15 @@ func (syncer *Syncer) SyncFeed(feedURL string, templatePath string,
 			break
 		}
 	}
-	for _, item := range outstandingItems {
+	for i := len(outstandingItems) - 1; i >= 0; i-- {
+		item := outstandingItems[i]
 		if syncer.dryrun {
 			fmt.Println("would be tooting:\n", item.Title)
 			alreadyProcessed[item.GUID] = item
 			continue
+		}
+		if i < len(outstandingItems)-1 {
+			time.Sleep(1 * time.Second)
 		}
 		postID, err := syncer.poster.Post(item, tmpl)
 		if err != nil {

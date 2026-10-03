@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"text/template"
+	"time"
 
 	skybot "github.com/danrusei/gobot-bsky"
 	mdon "github.com/mattn/go-mastodon"
@@ -234,5 +235,64 @@ func TestBlueskyPoster_Post_UploadsFeatureImageThumb(t *testing.T) {
 
 	if !uploadBlobCalled {
 		t.Error("expected uploadBlob to be called for the item's feature image")
+	}
+}
+
+func TestBlueskyPoster_Post_PublishedParsedCreatedAt(t *testing.T) {
+	pubDate := time.Date(2026, 9, 29, 19, 45, 0, 0, time.UTC)
+	var capturedCreatedAt string
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "com.atproto.server.createSession") {
+			json.NewEncoder(w).Encode(map[string]any{
+				"accessJwt":  "test-access-jwt",
+				"refreshJwt": "test-refresh-jwt",
+				"handle":     "test-handle",
+				"did":        "did:plc:test-did",
+			})
+			return
+		}
+		if strings.Contains(r.URL.Path, "com.atproto.repo.createRecord") {
+			var body map[string]any
+			json.NewDecoder(r.Body).Decode(&body)
+			if record, ok := body["record"].(map[string]any); ok {
+				if ca, ok := record["createdAt"].(string); ok {
+					capturedCreatedAt = ca
+				}
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"cid": "test-cid",
+				"uri": "at://did:plc:test-did/app.bsky.feed.post/test-post-id",
+			})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"cid": "test-cid", "uri": "test-uri"})
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ctx := context.Background()
+	agent := skybot.NewAgent(ctx, server.URL, "handle", "apikey")
+	if err := agent.Connect(ctx); err != nil {
+		t.Fatalf("Connect failed: %v", err)
+	}
+
+	poster := &BlueskyPoster{skyAgent: &agent}
+
+	tmpl, _ := template.New("test").Parse("{{.Title}}")
+	item := &gofeed.Item{
+		Title:           "Item With PubDate",
+		Link:            "https://example.com/item",
+		PublishedParsed: &pubDate,
+	}
+
+	if _, err := poster.Post(item, tmpl); err != nil {
+		t.Fatalf("Post failed: %v", err)
+	}
+
+	expected := pubDate.Format(time.RFC3339)
+	if capturedCreatedAt != expected {
+		t.Errorf("expected createdAt %q, got %q", expected, capturedCreatedAt)
 	}
 }
