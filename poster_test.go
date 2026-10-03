@@ -12,6 +12,7 @@ import (
 	skybot "github.com/danrusei/gobot-bsky"
 	mdon "github.com/mattn/go-mastodon"
 	"github.com/mmcdole/gofeed"
+	ext "github.com/mmcdole/gofeed/extensions"
 )
 
 func TestMastodonPoster_Post(t *testing.T) {
@@ -146,5 +147,92 @@ func TestBlueskyPoster_Post(t *testing.T) {
 
 	if cid == "" {
 		t.Error("Expected non-empty CID")
+	}
+}
+
+func TestFeatureImageURL(t *testing.T) {
+	item := &gofeed.Item{
+		Extensions: ext.Extensions{
+			"media": {
+				"content": []ext.Extension{
+					{Attrs: map[string]string{"url": "https://example.com/posts/foo/feature.png"}},
+				},
+			},
+		},
+	}
+	if got := featureImageURL(item); got != "https://example.com/posts/foo/feature.png" {
+		t.Errorf("expected feature image url, got %q", got)
+	}
+
+	if got := featureImageURL(&gofeed.Item{}); got != "" {
+		t.Errorf("expected empty string for item without media:content, got %q", got)
+	}
+}
+
+func TestBlueskyPoster_Post_UploadsFeatureImageThumb(t *testing.T) {
+	imgServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write([]byte("fake-png-bytes"))
+	}))
+	defer imgServer.Close()
+
+	var uploadBlobCalled bool
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "com.atproto.server.createSession"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"accessJwt": "test-access-jwt", "refreshJwt": "test-refresh-jwt",
+				"handle": "test-handle", "did": "did:plc:test-did",
+			})
+		case strings.Contains(r.URL.Path, "com.atproto.repo.uploadBlob"):
+			uploadBlobCalled = true
+			json.NewEncoder(w).Encode(map[string]any{
+				"blob": map[string]any{
+					"$type":    "blob",
+					"ref":      map[string]any{"$link": "bafkreicwamkg77pijyudfbdmskelsnuztr6gp62lqfjv3e3urbs3gxnv2m"},
+					"mimeType": "image/png",
+					"size":     14,
+				},
+			})
+		case strings.Contains(r.URL.Path, "com.atproto.repo.createRecord"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"cid": "test-cid",
+				"uri": "at://did:plc:test-did/app.bsky.feed.post/test-post-id",
+			})
+		default:
+			json.NewEncoder(w).Encode(map[string]any{"cid": "test-cid", "uri": "test-uri"})
+		}
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	ctx := context.Background()
+	agent := skybot.NewAgent(ctx, server.URL, "handle", "apikey")
+	if err := agent.Connect(ctx); err != nil {
+		t.Fatalf("Connect failed: %v", err)
+	}
+
+	poster := &BlueskyPoster{skyAgent: &agent}
+
+	tmpl, _ := template.New("test").Parse("{{.Title}}")
+	item := &gofeed.Item{
+		Title: "Hello Bluesky",
+		Link:  "https://example.com/1",
+		Extensions: ext.Extensions{
+			"media": {
+				"content": []ext.Extension{
+					{Attrs: map[string]string{"url": imgServer.URL}},
+				},
+			},
+		},
+	}
+
+	if _, err := poster.Post(item, tmpl); err != nil {
+		t.Fatalf("Post failed: %v", err)
+	}
+
+	if !uploadBlobCalled {
+		t.Error("expected uploadBlob to be called for the item's feature image")
 	}
 }

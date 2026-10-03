@@ -21,7 +21,6 @@ go_library(
     deps = [
         "@com_github_bluesky_social_indigo//api/atproto",
         "@com_github_bluesky_social_indigo//api/bsky",
-        "@com_github_bluesky_social_indigo//lex/util",
         "@com_github_bluesky_social_indigo//xrpc",
         "@com_github_danrusei_gobot_bsky//:gobot-bsky",
         "@com_github_jomei_notionapi//:notionapi",
@@ -67,5 +66,6 @@ go_test(
         "@com_github_mattn_go_mastodon//:go-mastodon",
         "@com_github_mattn_go_sqlite3//:go-sqlite3",
         "@com_github_mmcdole_gofeed//:gofeed",
+        "@com_github_mmcdole_gofeed//extensions",
     ],
 )
